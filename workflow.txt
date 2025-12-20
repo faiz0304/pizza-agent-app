@@ -1,0 +1,893 @@
+# 🍕 PIZZA AGENT APP - COMPLETE WORKFLOW DOCUMENTATION
+# From Initial Setup to Production Deployment
+
+================================================================================
+                        TABLE OF CONTENTS
+================================================================================
+1. PROJECT OVERVIEW
+2. INITIAL SETUP WORKFLOW
+3. DEVELOPMENT WORKFLOW
+4. USER JOURNEY WORKFLOW
+5. AGENT SYSTEM WORKFLOW
+6. DATABASE WORKFLOW
+7. DEPLOYMENT WORKFLOW
+8. TESTING WORKFLOW
+9. TROUBLESHOOTING WORKFLOW
+10. MAINTENANCE WORKFLOW
+
+================================================================================
+                    1. PROJECT OVERVIEW
+================================================================================
+
+Project Name: Agentic Pizza Ordering System
+Architecture: Full-stack web application with AI agent
+Tech Stack:
+  - Backend: FastAPI + Python 3.10+
+  - Frontend: Next.js 14 + TypeScript + Tailwind CSS
+  - Database: MongoDB Atlas
+  - Vector Store: ChromaDB (RAG system)
+  - AI: Multi-LLM (HuggingFace, Groq, Google)
+  - Communication: Twilio WhatsApp Integration
+
+Project Structure:
+pizza-agent-app/
+├── backend/                  # FastAPI Backend
+│   ├── agent/               # Agent core & tools registry
+│   ├── tools/               # 7 agent tools
+│   ├── routes/              # API endpoints (chatbot, menu, order, whatsapp)
+│   ├── utils/               # Database, embeddings, LLM client
+│   ├── main.py              # FastAPI application entry point
+│   ├── seed_data.py         # Database seeding script
+│   ├── requirements.txt     # Python dependencies
+│   └── venv/                # Virtual environment
+│
+└── frontend/                # Next.js Frontend
+    ├── app/                 # Pages (chat, menu, cart, order)
+    ├── components/          # Reusable UI components
+    ├── lib/                 # API client
+    ├── public/              # Static assets
+    └── package.json         # Node dependencies
+
+================================================================================
+                    2. INITIAL SETUP WORKFLOW
+================================================================================
+
+STEP 1: PREREQUISITES INSTALLATION
+-----------------------------------
+□ Install Python 3.10 or higher
+  - Download from python.org
+  - Verify: python --version
+
+□ Install Node.js 18 or higher
+  - Download from nodejs.org
+  - Verify: node --version && npm --version
+
+□ Install Git
+  - Download from git-scm.com
+  - Verify: git --version
+
+STEP 2: CLONE/CREATE PROJECT
+----------------------------
+□ Clone or navigate to project directory:
+  cd D:\Antigravity_pizza_agent\pizza-agent-app
+
+STEP 3: BACKEND SETUP
+----------------------
+□ Navigate to backend folder:
+  cd backend
+
+□ Create virtual environment:
+  python -m venv venv
+
+□ Activate virtual environment:
+  WINDOWS: .\venv\Scripts\activate.ps1
+  MAC/LINUX: source venv/bin/activate
+
+□ Install Python dependencies:
+  pip install -r requirements.txt
+
+□ Configure environment variables:
+  - Copy .env.example to .env
+  - Fill in the following required variables:
+
+    MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/
+    MONGODB_DB_NAME=pizza_db
+    HUGGINGFACE_API_TOKEN=hf_xxxxxxxxxxxxx
+    GROQ_API_KEY=gsk_xxxxxxxxxxxxx (optional)
+    GOOGLE_API_KEY=AIxxxxxxxxxxxxx (optional)
+    TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxx
+    TWILIO_AUTH_TOKEN=xxxxxxxxxxxxx
+    TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
+    FRONTEND_URL=http://localhost:3000
+    PORT=8000
+    HOST=0.0.0.0
+    CHROMA_PERSIST_DIR=./chroma_db
+    CHROMA_COLLECTION_NAME=customer_support_kb
+
+STEP 4: DATABASE SETUP
+-----------------------
+□ Create MongoDB Atlas account:
+  - Go to mongodb.com/cloud/atlas
+  - Create free cluster
+  - Add database user
+  - Whitelist IP address (or allow all: 0.0.0.0/0)
+  - Get connection string
+
+□ Seed the database with initial data:
+  python seed_data.py
+
+  This will create:
+  - Menu items (10+ pizzas)
+  - Sample customer data
+  - Customer support knowledge base
+
+□ Verify seeding:
+  - Check MongoDB Atlas interface
+  - Collections should show: menu, orders, customers
+
+STEP 5: FRONTEND SETUP
+-----------------------
+□ Navigate to frontend folder:
+  cd ../frontend
+
+□ Install Node dependencies:
+  npm install
+
+□ Configure environment variables:
+  - Copy .env.local.example to .env.local
+  - Set backend URL:
+    NEXT_PUBLIC_API_URL=http://localhost:8000
+
+□ Build to verify setup:
+  npm run build
+
+STEP 6: EXTERNAL SERVICES SETUP
+--------------------------------
+□ HuggingFace API:
+  - Sign up at huggingface.co
+  - Generate API token from Settings > Access Tokens
+  - Add to backend .env
+
+□ Twilio WhatsApp (Optional):
+  - Sign up at twilio.com
+  - Get WhatsApp sandbox number
+  - Configure webhook: https://your-domain.com/whatsapp/webhook
+  - Add credentials to backend .env
+
+□ Groq API (Optional - LLM fallback):
+  - Sign up at groq.com
+  - Get API key
+  - Add to backend .env
+
+□ Google AI (Optional - LLM fallback):
+  - Sign up at ai.google.dev
+  - Get API key
+  - Add to backend .env
+
+================================================================================
+                    3. DEVELOPMENT WORKFLOW
+================================================================================
+
+DAILY STARTUP SEQUENCE
+-----------------------
+1. Open Terminal/PowerShell
+
+2. Start Backend:
+   cd D:\Antigravity_pizza_agent\pizza-agent-app\backend
+   .\venv\Scripts\activate.ps1       # Activate venv
+   python main.py                     # Start backend server
+   
+   OR use the batch file:
+   START-BACKEND.bat
+
+   Backend runs at: http://localhost:8000
+   API docs at: http://localhost:8000/docs
+
+3. Start Frontend (in new terminal):
+   cd D:\Antigravity_pizza_agent\pizza-agent-app\frontend
+   npm run dev
+   
+   OR use the batch file:
+   START-FRONTEND.bat
+
+   Frontend runs at: http://localhost:3000
+
+BACKEND DEVELOPMENT WORKFLOW
+-----------------------------
+1. Activate virtual environment:
+   .\venv\Scripts\activate.ps1
+
+2. Make code changes in:
+   - routes/*.py (API endpoints)
+   - agent/*.py (Agent logic)
+   - tools/*.py (Agent tools)
+   - utils/*.py (Utilities)
+
+3. Test changes:
+   - Backend auto-reloads with uvicorn --reload
+   - Check http://localhost:8000/docs for API testing
+   - Use Postman or curl for endpoint testing
+
+4. Add new dependencies:
+   pip install <package>
+   pip freeze > requirements.txt
+
+5. Database operations:
+   - Modify seed_data.py for data changes
+   - Re-run: python seed_data.py
+
+FRONTEND DEVELOPMENT WORKFLOW
+------------------------------
+1. Make changes in:
+   - app/*.tsx (Pages)
+   - components/*.tsx (Components)
+   - lib/*.ts (API client)
+
+2. Test changes:
+   - Next.js auto-reloads on save
+   - Check browser at http://localhost:3000
+
+3. Add new dependencies:
+   npm install <package>
+
+4. Build for production:
+   npm run build
+   npm start
+
+CODE ORGANIZATION GUIDELINES
+-----------------------------
+Backend:
+- routes/*.py: REST API endpoints
+- agent/core.py: Agent decision logic
+- agent/tools_registry.py: Tool registration
+- tools/*.py: Individual tool implementations
+- utils/db.py: Database operations
+- utils/llm_client.py: LLM API calls
+- utils/embeddings.py: Vector embeddings
+
+Frontend:
+- app/page.tsx: Home page
+- app/chat/page.tsx: Chat interface
+- app/menu/page.tsx: Menu browsing
+- app/order/page.tsx: Order tracking
+- components/: Reusable UI components
+- lib/api.ts: Backend API client
+
+================================================================================
+                    4. USER JOURNEY WORKFLOW
+================================================================================
+
+USER JOURNEY A: WEB ORDERING
+-----------------------------
+1. User visits http://localhost:3000
+
+2. Options presented:
+   - Browse Menu
+   - Chat with AI Agent
+   - Track Order
+
+3. SCENARIO 1: Browse and Order via Menu
+   ┌─────────────────────┐
+   │ User clicks Menu    │
+   └──────────┬──────────┘
+              │
+   ┌──────────▼──────────┐
+   │ Views pizza catalog │
+   │ - Filters (veg/non) │
+   │ - Search by name    │
+   └──────────┬──────────┘
+              │
+   ┌──────────▼──────────┐
+   │ Selects pizza       │
+   │ - Choose size       │
+   │ - Add to cart       │
+   └──────────┬──────────┘
+              │
+   ┌──────────▼──────────┐
+   │ Review cart         │
+   │ - Modify quantities │
+   │ - Remove items      │
+   └──────────┬──────────┘
+              │
+   ┌──────────▼──────────┐
+   │ Place order         │
+   │ - Enter details     │
+   │ - Confirm order     │
+   └──────────┬──────────┘
+              │
+   ┌──────────▼──────────┐
+   │ Receive Order ID    │
+   │ ORD-YYYYMMDD-XXXX   │
+   └─────────────────────┘
+
+4. SCENARIO 2: Order via AI Chat
+   ┌─────────────────────┐
+   │ User clicks Chat    │
+   └──────────┬──────────┘
+              │
+   ┌──────────▼──────────────────────┐
+   │ User: "I want a spicy pizza"    │
+   └──────────┬──────────────────────┘
+              │
+   ┌──────────▼──────────────────────┐
+   │ AGENT-X analyzes intent         │
+   │ - Calls recommend_pizza tool    │
+   │ - Searches menu for spicy items │
+   └──────────┬──────────────────────┘
+              │
+   ┌──────────▼──────────────────────┐
+   │ Agent responds with suggestions │
+   │ "Here are spicy options..."     │
+   └──────────┬──────────────────────┘
+              │
+   ┌──────────▼──────────────────────┐
+   │ User: "Order 2 medium Devil's   │
+   │ Inferno pizzas"                 │
+   └──────────┬──────────────────────┘
+              │
+   ┌──────────▼──────────────────────┐
+   │ AGENT-X creates order           │
+   │ - Validates items               │
+   │ - Calls create_order tool       │
+   └──────────┬──────────────────────┘
+              │
+   ┌──────────▼──────────────────────┐
+   │ Agent confirms order            │
+   │ "Order ORD-xxx created!"        │
+   └─────────────────────────────────┘
+
+5. Order Tracking:
+   ┌─────────────────────┐
+   │ User enters Order ID│
+   └──────────┬──────────┘
+              │
+   ┌──────────▼──────────┐
+   │ System shows status │
+   │ Timeline:           │
+   │ ✓ Created           │
+   │ ✓ Confirmed         │
+   │ → Preparing         │
+   │   Out for Delivery  │
+   │   Delivered         │
+   └─────────────────────┘
+
+USER JOURNEY B: WHATSAPP ORDERING
+----------------------------------
+1. User sends WhatsApp message to Twilio number
+
+2. Message received by backend /whatsapp/webhook
+
+3. AGENT-X processes message
+
+4. Response sent back via Twilio
+
+5. Example conversation:
+   User: "Hi"
+   Agent: "Welcome! I'm AGENT-X. How can I help you order pizza today?"
+   
+   User: "Show me your menu"
+   Agent: [Lists available pizzas with prices]
+   
+   User: "I want 1 large Margherita"
+   Agent: "Great choice! Order created: ORD-20241220-1234. Total: $14.99"
+
+================================================================================
+                    5. AGENT SYSTEM WORKFLOW
+================================================================================
+
+AGENT-X DECISION FLOW
+----------------------
+Every user message goes through this flow:
+
+1. MESSAGE RECEIVED
+   ↓
+2. LLM ANALYZES MESSAGE
+   - Understands intent
+   - Identifies required action
+   - Determines which tool(s) to use
+   ↓
+3. TOOL SELECTION
+   Available tools:
+   - search_kb: Knowledge base search
+   - search_menu: Menu search and filtering
+   - create_order: Order creation
+   - update_order: Order modification
+   - order_status: Order tracking
+   - recommend_pizza: AI recommendations
+   - ask_llm: General conversation
+   ↓
+4. TOOL EXECUTION
+   - Validates inputs
+   - Calls tool function
+   - Gets structured result
+   ↓
+5. RESPONSE FORMATION
+   - LLM formats user-friendly response
+   - Includes relevant data
+   - Adds helpful suggestions
+   ↓
+6. RESPONSE SENT TO USER
+
+TOOL EXECUTION DETAILS
+-----------------------
+1. search_kb Tool:
+   Input: query string
+   Process:
+   - Generates embedding using sentence-transformers
+   - Searches ChromaDB vector store
+   - Returns top 3 relevant KB chunks
+   Output: List of relevant information
+
+2. search_menu Tool:
+   Input: query string, filters (veg/non-veg)
+   Process:
+   - Queries MongoDB menu collection
+   - Applies text search and filters
+   - Returns matching pizzas
+   Output: List of menu items
+
+3. create_order Tool:
+   Input: user_id, items list
+   Process:
+   - Validates menu items
+   - Calculates total
+   - Creates order in MongoDB
+   - Generates unique order ID
+   Output: Order confirmation with ID
+
+4. order_status Tool:
+   Input: order_id
+   Process:
+   - Queries MongoDB orders collection
+   - Retrieves order details and status
+   Output: Order information
+
+5. recommend_pizza Tool:
+   Input: preferences (spicy, vegetarian, etc.)
+   Process:
+   - Analyzes menu based on tags
+   - Filters by user preferences
+   - Ranks by relevance
+   Output: Top 3 recommendations
+
+6. update_order Tool:
+   Input: order_id, updates
+   Process:
+   - Finds order in MongoDB
+   - Updates status or items
+   - Saves changes
+   Output: Updated order details
+
+7. ask_llm Tool:
+   Input: question
+   Process:
+   - Sends to LLM API
+   - Gets general response
+   Output: LLM-generated answer
+
+================================================================================
+                    6. DATABASE WORKFLOW
+================================================================================
+
+MONGODB COLLECTIONS
+-------------------
+1. menu
+   - Stores pizza menu items
+   - Fields: _id, name, description, price, category, tags, image
+   - Indexes: name (text), category
+
+2. orders
+   - Stores customer orders
+   - Fields: order_id, user_id, items, total, status, timestamp
+   - Indexes: order_id (unique), user_id, status
+
+3. customers
+   - Stores customer profiles
+   - Fields: user_id, name, email, phone, address
+   - Indexes: user_id (unique), email
+
+CHROMADB COLLECTIONS
+--------------------
+1. customer_support_kb
+   - Stores knowledge base embeddings
+   - Contents: Delivery policy, refund policy, allergen info, etc.
+   - Used for RAG (Retrieval Augmented Generation)
+
+DATABASE OPERATIONS WORKFLOW
+-----------------------------
+1. Seeding Database:
+   python seed_data.py
+   - Clears existing data (optional)
+   - Inserts menu items
+   - Creates sample customers
+   - Initializes ChromaDB with KB content
+
+2. Querying Data:
+   - Backend uses utils/db.py
+   - MongoDB operations via motor (async driver)
+   - ChromaDB operations via chromadb client
+
+3. Updating Data:
+   - Order status updates via API
+   - Menu modifications via database
+   - Customer profile updates via API
+
+4. Backup and Restore:
+   - MongoDB Atlas automatic backups
+   - Manual export: mongodump
+   - Manual import: mongorestore
+
+================================================================================
+                    7. DEPLOYMENT WORKFLOW
+================================================================================
+
+LOCAL DEPLOYMENT
+----------------
+Already covered in Section 2 (Initial Setup)
+
+DOCKER DEPLOYMENT
+-----------------
+1. Backend Docker:
+   cd backend
+   docker build -t pizza-backend .
+   docker run -p 8000:8000 --env-file .env pizza-backend
+
+2. Frontend Docker:
+   cd frontend
+   docker build -t pizza-frontend .
+   docker run -p 3000:3000 pizza-frontend
+
+CLOUD DEPLOYMENT - BACKEND (Render/Railway/Heroku)
+---------------------------------------------------
+1. Prepare for deployment:
+   - Ensure requirements.txt is up to date
+   - Set PORT environment variable support
+   - Configure production MongoDB URI
+
+2. Deploy to Render:
+   - Connect GitHub repository
+   - Select backend folder
+   - Set build command: pip install -r requirements.txt
+   - Set start command: uvicorn main:app --host 0.0.0.0 --port $PORT
+   - Add environment variables from .env
+   - Deploy
+
+3. Post-deployment:
+   - Run seed_data.py once (via Render shell)
+   - Test API endpoints
+   - Configure Twilio webhook with production URL
+
+CLOUD DEPLOYMENT - FRONTEND (Vercel/Netlify)
+---------------------------------------------
+1. Prepare for deployment:
+   - Set NEXT_PUBLIC_API_URL to production backend
+   - Test build: npm run build
+
+2. Deploy to Vercel:
+   - Import GitHub repository
+   - Select frontend folder
+   - Set environment variable: NEXT_PUBLIC_API_URL
+   - Deploy automatically
+
+3. Post-deployment:
+   - Test frontend functionality
+   - Verify backend connectivity
+   - Update CORS settings in backend
+
+PRODUCTION CHECKLIST
+--------------------
+□ Environment variables configured
+□ Database seeded
+□ CORS configured for production URLs
+□ API keys secured
+□ MongoDB IP whitelist updated
+□ Twilio webhook configured
+□ SSL certificates enabled
+□ Monitoring setup
+□ Backup strategy implemented
+
+================================================================================
+                    8. TESTING WORKFLOW
+================================================================================
+
+BACKEND TESTING
+---------------
+1. Health Check:
+   curl http://localhost:8000/health
+
+2. API Endpoints Tests:
+   - Go to http://localhost:8000/docs
+   - Use Swagger UI to test each endpoint
+   - Test chatbot: POST /chatbot
+   - Test menu: GET /menu
+   - Test orders: POST /order, GET /order/{order_id}
+
+3. Agent Tools Testing:
+   - Send chat messages testing each tool
+   - Verify tool selection and execution
+   - Check response quality
+
+4. Integration Tests:
+   python -m pytest tests/
+   (if test suite exists)
+
+FRONTEND TESTING
+----------------
+1. Build Test:
+   npm run build
+
+2. Manual UI Testing:
+   - Navigate all pages
+   - Test chat interface
+   - Test menu browsing and search
+   - Test order placement
+   - Test order tracking
+   - Verify responsive design
+
+3. Component Tests:
+   npm test
+   (if test suite exists)
+
+END-TO-END TESTING
+------------------
+1. Complete Order Flow:
+   - Open frontend
+   - Chat with agent
+   - Place order via chat
+   - Verify order in database
+   - Check order tracking
+
+2. WhatsApp Integration Test:
+   - Send message to Twilio number
+   - Verify webhook receives message
+   - Check agent response
+   - Complete order via WhatsApp
+
+AUTOMATED TESTING SCRIPT
+-------------------------
+Use provided scripts:
+- RUN-TESTS.bat (Windows)
+- run-tests.sh (Mac/Linux)
+- start-and-test.bat (Full stack test)
+
+================================================================================
+                    9. TROUBLESHOOTING WORKFLOW
+================================================================================
+
+COMMON ISSUES AND SOLUTIONS
+----------------------------
+
+ISSUE 1: Backend won't start
+SYMPTOM: "uvicorn not recognized" or import errors
+SOLUTION:
+1. Activate virtual environment:
+   .\venv\Scripts\activate.ps1
+2. Verify uvicorn installed:
+   pip show uvicorn
+3. Reinstall if needed:
+   pip install -r requirements.txt
+4. Use full path:
+   .\venv\Scripts\python.exe main.py
+
+ISSUE 2: ChromaDB import fails
+SYMPTOM: NumPy compatibility errors
+SOLUTION:
+1. Check NumPy version:
+   pip show numpy
+2. ChromaDB 0.4.22 works with NumPy < 2.0
+3. If needed, downgrade:
+   pip install "numpy<2.0"
+4. Test import:
+   python -c "import chromadb"
+
+ISSUE 3: MongoDB connection failed
+SYMPTOM: Connection timeout or authentication error
+SOLUTION:
+1. Verify MONGODB_URI in .env
+2. Check MongoDB Atlas IP whitelist
+3. Test connection string
+4. Ensure database user exists
+5. Check network/firewall
+
+ISSUE 4: Frontend can't connect to backend
+SYMPTOM: API calls fail with network errors
+SOLUTION:
+1. Verify backend is running (http://localhost:8000)
+2. Check NEXT_PUBLIC_API_URL in .env.local
+3. Verify CORS settings in backend main.py
+4. Check browser console for errors
+
+ISSUE 5: HuggingFace API errors
+SYMPTOM: LLM calls fail or timeout
+SOLUTION:
+1. Verify API token in .env
+2. Check HuggingFace status
+3. Try fallback LLMs (Groq/Google)
+4. Increase timeout settings
+5. Check rate limits
+
+ISSUE 6: WhatsApp not receiving messages
+SYMPTOM: No response from bot
+SOLUTION:
+1. Verify Twilio credentials in .env
+2. Check webhook URL configuration
+3. Test webhook endpoint directly
+4. Check Twilio logs
+5. Verify WhatsApp sandbox activation
+
+DIAGNOSTIC COMMANDS
+-------------------
+1. Check Python version:
+   python --version
+
+2. Check installed packages:
+   pip list
+
+3. Test ChromaDB:
+   python -c "import chromadb; print('OK')"
+
+4. Test MongoDB connection:
+   python -c "from utils.db import get_db; db=get_db(); print(db.connect())"
+
+5. Check backend logs:
+   Check terminal output for errors
+
+6. Check frontend logs:
+   Check browser console (F12)
+
+================================================================================
+                    10. MAINTENANCE WORKFLOW
+================================================================================
+
+REGULAR MAINTENANCE TASKS
+--------------------------
+
+DAILY
+-----
+□ Monitor server logs
+□ Check error rates
+□ Verify API response times
+□ Monitor database performance
+
+WEEKLY
+------
+□ Review and respond to user feedback
+□ Check database size and optimize
+□ Update knowledge base content
+□ Test all critical user flows
+□ Review and fix any reported bugs
+
+MONTHLY
+-------
+□ Update dependencies:
+  Backend: pip list --outdated
+  Frontend: npm outdated
+□ Security patches
+□ Database backup verification
+□ Performance optimization
+□ API token rotation
+□ Review analytics and usage patterns
+
+QUARTERLY
+---------
+□ Major dependency updates
+□ Feature enhancements
+□ UI/UX improvements
+□ Architecture review
+□ Security audit
+□ Documentation updates
+□ Load testing
+
+DEPENDENCY UPDATE WORKFLOW
+---------------------------
+1. Backend Dependencies:
+   pip list --outdated
+   pip install --upgrade <package>
+   pip freeze > requirements.txt
+   Test thoroughly before committing
+
+2. Frontend Dependencies:
+   npm outdated
+   npm update <package>
+   npm run build
+   Test thoroughly before committing
+
+DATABASE MAINTENANCE
+--------------------
+1. Monitor collection sizes:
+   - Check MongoDB Atlas metrics
+   - Set up alerts for size thresholds
+
+2. Index optimization:
+   - Review slow queries
+   - Add indexes as needed
+   - Remove unused indexes
+
+3. Data cleanup:
+   - Archive old orders (>1 year)
+   - Clean up test data
+   - Optimize ChromaDB collection
+
+BACKUP STRATEGY
+----------------
+1. MongoDB:
+   - Automated backups via Atlas
+   - Point-in-time recovery enabled
+   - Test restore quarterly
+
+2. Code:
+   - Git version control
+   - GitHub repository
+   - Tagged releases
+
+3. Configuration:
+   - .env files backed up securely
+   - Documentation kept up to date
+
+MONITORING AND ALERTS
+----------------------
+1. Setup monitoring:
+   - Uptime monitoring (UptimeRobot, etc.)
+   - Error tracking (Sentry, etc.)
+   - Performance monitoring (New Relic, etc.)
+
+2. Key metrics to track:
+   - API response times
+   - Error rates
+   - Order completion rate
+   - User engagement
+   - Database query performance
+
+================================================================================
+                    QUICK REFERENCE COMMANDS
+================================================================================
+
+BACKEND COMMANDS
+----------------
+Start backend:        .\venv\Scripts\activate.ps1 && python main.py
+API docs:             http://localhost:8000/docs
+Health check:         curl http://localhost:8000/health
+Seed database:        python seed_data.py
+Install dependency:   pip install <package>
+Update requirements:  pip freeze > requirements.txt
+
+FRONTEND COMMANDS
+-----------------
+Start dev server:     npm run dev
+Build production:     npm run build
+Start production:     npm start
+Install dependency:   npm install <package>
+Run tests:            npm test
+
+DATABASE COMMANDS
+-----------------
+Seed data:           python backend/seed_data.py
+Check connection:    python -c "from utils.db import get_db; ..."
+
+DEPLOYMENT COMMANDS
+-------------------
+Docker backend:      docker build -t pizza-backend . && docker run -p 8000:8000 pizza-backend
+Docker frontend:     docker build -t pizza-frontend . && docker run -p 3000:3000 pizza-frontend
+
+TESTING COMMANDS
+----------------
+Backend health:      curl http://localhost:8000/health
+Frontend build:      npm run build
+Run test suite:      npm test (frontend) or pytest (backend)
+
+================================================================================
+                    END OF WORKFLOW DOCUMENTATION
+================================================================================
+
+For more detailed information, refer to:
+- README.md (Project overview)
+- QUICK-START.md (Quick setup guide)
+- STARTUP-GUIDE.md (Detailed startup instructions)
+- DEPLOYMENT.md (Deployment guide)
+- TESTING.md (Testing guide)
+- backend/README.md (Backend-specific docs)
+- frontend/README.md (Frontend-specific docs)
+
+Questions or issues? Check the troubleshooting section or open a GitHub issue.
+
+Built with ❤️ and 🍕
