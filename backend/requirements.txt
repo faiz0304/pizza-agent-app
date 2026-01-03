@@ -1,53 +1,48 @@
 # ========================================================================
-# PYTHON VERSION REQUIREMENT: 3.10.x or 3.11.x ONLY
+# PYTHON VERSION: 3.12.x Compatible
 # ========================================================================
 # 
-# Python 3.12+ is NOT supported due to:
-#   - No stable pydantic-core wheels (triggers Rust compilation)
-#   - chromadb incompatibility
-#   - sentence-transformers build failures
+# This requirements.txt is optimized for Python 3.12 with prebuilt wheels
+# All packages have been tested to install without Rust/Cargo compilation
 #
-# To install Python 3.11.9 (recommended):
-#   https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe
-#
-# After installing Python 3.11, rebuild your venv:
-#   Run: REBUILD-BACKEND-VENV.bat
-#
+# Last updated: 2026-01-03
 # ========================================================================
 
 # Core Dependencies - Install numpy first to avoid conflicts
 numpy<2.0
 
 # FastAPI & Server
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-python-multipart==0.0.6
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-multipart==0.0.9
+
+# Pydantic V2 (Full Python 3.12 support with cp312 wheels)
+pydantic==2.10.3
+pydantic-settings==2.6.1
 
 # Database
-pymongo==4.6.1
-motor==3.3.2
+pymongo==4.10.1
+motor==3.6.0
 
-# Vector Store & Embeddings
-chromadb==0.4.22
-sentence-transformers==2.3.1
+# Vector Store & Embeddings (Python 3.12 compatible versions)
+chromadb==0.5.23
+sentence-transformers==3.3.1
 
 # LLM Integration
-huggingface-hub==0.20.3
-requests==2.31.0
+huggingface-hub==0.26.5
+requests==2.32.3
 
 # Twilio (WhatsApp)
-twilio==8.11.0
+twilio==9.4.0
 
 # Utilities
-python-dotenv==1.0.0
-pydantic==2.5.3
-pydantic-settings==2.1.0
+python-dotenv==1.0.1
 
 # Testing
-pytest==7.4.4
-pytest-asyncio==0.23.3
-httpx==0.26.0
+pytest==8.3.4
+pytest-asyncio==0.24.0
+httpx==0.28.1
 
 # Optional (for Groq & Google)
-groq==0.4.0
-google-generativeai==0.3.2
+groq==0.11.0
+google-generativeai==0.8.3
