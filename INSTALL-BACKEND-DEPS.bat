@@ -56,12 +56,13 @@ echo [INFO] Installing dependencies from requirements.txt...
 echo [INFO] This may take a few minutes...
 echo.
 
-REM Strategy: Install numpy first, then everything else
-echo [STEP 3.1] Installing numpy...
-python -m pip install "numpy<2.0" --only-binary=:all:
+REM Strategy: Install numpy first (has cp312 wheels), then everything else
+echo [STEP 3.1] Installing numpy 1.26.4...
+python -m pip install numpy==1.26.4
 
 if errorlevel 1 (
     echo [ERROR] Failed to install numpy
+    echo [ERROR] Ensure you have internet connection
     pause
     exit /b 1
 )
@@ -70,7 +71,7 @@ echo [OK] numpy installed
 echo.
 
 echo [STEP 3.2] Installing all other dependencies...
-python -m pip install -r requirements.txt --prefer-binary
+python -m pip install -r requirements.txt
 
 if errorlevel 1 (
     echo.

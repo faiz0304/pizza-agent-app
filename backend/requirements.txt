@@ -9,7 +9,7 @@
 # ========================================================================
 
 # Core Dependencies - Install numpy first to avoid conflicts
-numpy<2.0
+numpy==1.26.4
 
 # FastAPI & Server
 fastapi==0.115.0
