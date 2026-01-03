@@ -51,6 +51,23 @@ if not exist "%BACKEND_DIR%\venv\Scripts\activate.bat" (
     exit /b 1
 )
 
+REM Check if dependencies are installed (quick check for chromadb)
+"%BACKEND_DIR%\venv\Scripts\python.exe" -c "import chromadb" >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Backend dependencies not installed
+    echo.
+    echo [SOLUTION] Run this command first:
+    echo   INSTALL-BACKEND-DEPS.bat
+    echo.
+    echo Or manually install dependencies:
+    echo   cd backend
+    echo   venv\Scripts\activate
+    echo   pip install -r requirements.txt
+    echo.
+    pause
+    exit /b 1
+)
+
 REM Check if node_modules exists in frontend
 if not exist "%FRONTEND_DIR%\node_modules" (
     echo [WARNING] node_modules not found in frontend
