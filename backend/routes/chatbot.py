@@ -50,21 +50,48 @@ async def chat(request: ChatRequest):
     6. Return a formatted response
     """
     try:
+        from datetime import datetime
         from utils.multilingual import detect_roman_urdu_hindi, get_multilingual_prompt_prefix
         from utils.memory import get_conversation_memory
+        from utils.db import get_db
         
-        # Get conversation memory
+        # Get conversation memory and database
         memory = get_conversation_memory()
+        db = get_db()
         
-        # Detect multilingual input
+        # === PHASE 2 & 3: Load long-term memory ===
+        user_prefs = db.get_user_preferences(request.user_id)
+        
+        # Log memory read
+        if user_prefs:
+            logger.debug(f"📚 Loaded user preferences for {request.user_id}")
+        else:
+            logger.debug(f"📚 No existing preferences for {request.user_id}")
+        
+        # Detect multilingual input and persist language
         is_multilingual = detect_roman_urdu_hindi(request.message)
         multilingual_prefix = get_multilingual_prompt_prefix(request.message)
+        
+        detected_language = "english"
+        if is_multilingual:
+            detected_language = "roman_urdu"
+            logger.info(f"🌐 Detected Roman Urdu/Hindi from {request.user_id}")
+            
+            # Store language preference if changed
+            current_lang = user_prefs.get("language_preference") if user_prefs else None
+            if current_lang != detected_language:
+                db.update_language_preference(request.user_id, detected_language)
+                logger.info(f"💾 Updated language preference to {detected_language}")
         
         # Add conversation context if provided
         conversation_history = request.conversation_history or []
         
         # Add user message to memory
         memory.add_message(request.user_id, "user", request.message)
+        
+        # === PHASE 1: Compress history for token efficiency ===
+        compressed_state = memory.compress_history(request.user_id)
+        logger.debug(f"🗜️ Compressed state: {len(str(compressed_state))} chars")
         
         # Check for order confirmation (yes, haan, ok, theek hai, etc.)
         confirmation_keywords = ['yes', 'haan', 'ha', 'confirm', 'ok', 'okay', 'theek hai', 'acha', 'sure', 'book karo', 'karo']
@@ -76,7 +103,7 @@ async def chat(request: ChatRequest):
         
         if pending_order and is_confirmation:
             # User is confirming a pending order - execute it now
-            logger.info(f"User {request.user_id} confirmed pending order: {pending_order}")
+            logger.info(f"✅ User {request.user_id} confirmed pending order")
             
             # Execute the pending order
             from agent.tools_registry import get_tool_registry
@@ -91,6 +118,20 @@ async def chat(request: ChatRequest):
                 if order_result.get("success"):
                     order_id = order_result.get("order_id", "N/A")
                     total = order_result.get("total", 0)
+                    items = order_result.get("items", [])
+                    
+                    # === PHASE 3: Track order completion in long-term memory ===
+                    try:
+                        db.track_order_completion(
+                            user_id=request.user_id,
+                            order_id=order_id,
+                            items=items,
+                            total=total
+                        )
+                        logger.info(f"💾 Tracked order completion for {request.user_id}")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to track order: {e}")
+                    
                     reply_text = f"🎉 Order confirmed!\n\n📋 Order ID: {order_id}\n💰 Total: ${total}\n\n✅ Your pizza will be delivered in 25-35 minutes!"
                 else:
                     reply_text = f"❌ Sorry, there was an issue placing your order: {order_result.get('error', 'Unknown error')}"

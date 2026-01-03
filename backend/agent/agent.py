@@ -145,7 +145,8 @@ Respond with VALID JSON ONLY:"""
         self, 
         user_message: str, 
         user_id: str = "guest",
-        conversation_history: Optional[List[Dict]] = None
+        conversation_history: Optional[List[Dict]] = None,
+        memory_context: str = ""
     ) -> Dict[str, Any]:
         """
         Process a user message and return agent's decision or response
@@ -154,6 +155,7 @@ Respond with VALID JSON ONLY:"""
             user_message: User's input message
             user_id: User identifier
             conversation_history: Optional list of previous messages
+            memory_context: Optional memory-aware context string
             
         Returns:
             Dict with agent's response or tool call
@@ -164,8 +166,14 @@ Respond with VALID JSON ONLY:"""
             # Build context
             context = self._build_context(user_message, conversation_history)
             
-            # Get agent's decision from LLM
-            full_prompt = f"{self.system_prompt}\n\nUser Message: {user_message}\n\nYour JSON Response:"
+            # Build prompt with memory context
+            prompt_parts = [self.system_prompt]
+            
+            if memory_context:
+                prompt_parts.append(f"\n--- Memory Context ---\n{memory_context}\n")
+            
+            prompt_parts.append(f"\nUser Message: {user_message}\n\nYour JSON Response:")
+            full_prompt = "".join(prompt_parts)
             
             llm_response = generate_text(full_prompt, max_tokens=800, temperature=0.7)
             
@@ -246,6 +254,61 @@ Respond with VALID JSON ONLY:"""
         
         return "\n".join(context_parts)
     
+    def _build_memory_context(
+        self,
+        user_id: str,
+        session_state: Optional[Dict[str, Any]] = None,
+        user_preferences: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        Build memory-aware context from short-term and long-term memory
+        
+        Args:
+            user_id: User identifier
+            session_state: Compressed session state
+            user_preferences: Long-term preferences
+            
+        Returns:
+            Formatted context string for prompt
+        """
+        context_parts = []
+        
+        # Add long-term preferences
+        if user_preferences:
+            prefs = user_preferences.get("preferences", {})
+            favorites = prefs.get("favorite_items", [])
+            if favorites:
+                fav_str = ", ".join(favorites[:3])  # Top 3
+                context_parts.append(f"💾 User favorites: {fav_str}")
+            
+            lang_pref = user_preferences.get("language_preference")
+            if lang_pref and lang_pref != "english":
+                context_parts.append(f"🌐 Preferred language: {lang_pref}")
+            
+            order_count = user_preferences.get("behavior_patterns", {}).get("order_count", 0)
+            if order_count > 0:
+                context_parts.append(f"📊 Previous orders: {order_count}")
+        
+        # Add session state
+        if session_state:
+            intents = session_state.get("recent_intents", [])
+            if intents:
+                context_parts.append(f"🎯 Recent intents: {', '.join(intents[-2:])}")
+            
+            entities = session_state.get("entities", {})
+            mentioned_pizzas = entities.get("mentioned_pizzas", [])
+            if mentioned_pizzas:
+                context_parts.append(f"🍕 Mentioned: {', '.join(mentioned_pizzas)}")
+            
+            has_pending = session_state.get("has_pending_order", False)
+            if has_pending:
+                context_parts.append("⚠️ PENDING ORDER awaiting confirmation")
+        
+        if not context_parts:
+            return ""
+        
+        return "\n".join(context_parts)
+    
     def execute_tool_call(self, tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute a tool call and return results
@@ -264,7 +327,9 @@ Respond with VALID JSON ONLY:"""
         user_message: str, 
         user_id: str = "guest",
         conversation_history: Optional[List[Dict]] = None,
-        auto_execute_tools: bool = True
+        auto_execute_tools: bool = True,
+        user_preferences: Optional[Dict[str, Any]] = None,
+        session_state: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Run the agent: process message and optionally execute tools
@@ -274,12 +339,30 @@ Respond with VALID JSON ONLY:"""
             user_id: User identifier
             conversation_history: Optional conversation history
             auto_execute_tools: If True, automatically execute tool calls
+            user_preferences: Optional long-term user preferences
+            session_state: Optional compressed session state
             
         Returns:
             Final response with agent's reply or tool results
         """
-        # Get agent's decision
-        decision = self.process_message(user_message, user_id, conversation_history)
+        # Build memory-aware context
+        memory_context = self._build_memory_context(
+            user_id=user_id,
+            session_state=session_state,
+            user_preferences=user_preferences
+        )
+        
+        # Log memory usage
+        if memory_context:
+            logger.debug(f"💾 Memory context: {len(memory_context)} chars")
+        
+        # Get agent's decision with memory context
+        decision = self.process_message(
+            user_message=user_message,
+            user_id=user_id,
+            conversation_history=conversation_history,
+            memory_context=memory_context
+        )
         
         # If it's a direct reply, return it
         if "reply" in decision:
