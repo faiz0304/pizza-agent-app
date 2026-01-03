@@ -7,17 +7,19 @@
 #
 # INSTALLATION NOTE (Windows):
 #   Use INSTALL-BACKEND-DEPS.bat which forces binary-only installation
-#   Manual install: pip install numpy==1.26.4 --only-binary=numpy
+#   Manual install: pip install "numpy>=1.26,<2.0" --only-binary=numpy
 #
 # If experiencing build errors, clear pip cache first:
 #   pip cache purge
+#   pip install --upgrade pip
 #
 # Last updated: 2026-01-03
 # ========================================================================
 
 # Core Dependencies - Install numpy first to avoid conflicts
-# NumPy 1.26.4 has prebuilt wheels for Python 3.12 (cp312-win_amd64)
-numpy==1.26.4
+# NumPy 1.26.x series has prebuilt wheels for Python 3.12 (cp312-win_amd64)
+# Using version range to let pip find best available wheel
+numpy>=1.26,<2.0
 
 # FastAPI & Server
 fastapi==0.115.0

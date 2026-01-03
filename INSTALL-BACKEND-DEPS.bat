@@ -38,14 +38,20 @@ echo [INFO] Activating virtual environment...
 call venv\Scripts\activate.bat
 
 echo.
+echo [INFO] Checking pip version...
+for /f "tokens=2" %%i in ('python -m pip --version') do set PIP_VERSION=%%i
+echo [INFO] Current pip: %PIP_VERSION%
+
 echo [INFO] Upgrading pip, setuptools, and wheel...
-python -m pip install --upgrade pip setuptools wheel --quiet
+python -m pip install --upgrade pip setuptools wheel
 
 if errorlevel 1 (
     echo [WARNING] Failed to upgrade pip tools (continuing anyway)
+) else (
+    for /f "tokens=2" %%i in ('python -m pip --version') do set NEW_PIP_VERSION=%%i
+    echo [OK] pip upgraded to: %NEW_PIP_VERSION%
 )
 
-echo [OK] Core tools upgraded
 echo.
 
 REM ========================================================================
@@ -58,26 +64,34 @@ echo [INFO] This may take a few minutes...
 echo.
 
 REM Critical: Install numpy first with binary-only flag
-echo [STEP 3.1] Installing numpy 1.26.4 (binary wheel)...
+echo [STEP 3.1] Installing numpy (binary wheel)...
+echo [INFO] Searching for numpy ^>=1.26,^<2.0 with Python 3.12 wheels...
 echo [INFO] Forcing binary installation to avoid GCC/Rust compilation...
 
-python -m pip install numpy==1.26.4 --only-binary=numpy
+python -m pip install "numpy>=1.26,<2.0" --only-binary=numpy
 
 if errorlevel 1 (
     echo.
     echo [ERROR] Failed to install numpy binary wheel
     echo.
     echo Troubleshooting:
-    echo   1. Check internet connection: ping pypi.org
-    echo   2. Clear pip cache: pip cache purge
-    echo   3. Try: pip install --upgrade pip
-    echo   4. Verify Python version: python --version (should be 3.12.x)
+    echo   1. Clear pip cache: pip cache purge
+    echo   2. Try specific version: pip install numpy==1.26.3 --only-binary=numpy
+    echo   3. Check internet: ping pypi.org
+    echo   4. Upgrade pip: python -m pip install --upgrade pip
     echo.
     pause
     exit /b 1
 )
 
-echo [OK] numpy 1.26.4 installed from binary wheel
+REM Verify numpy installation
+python -c "import numpy; print('[OK] numpy version:', numpy.__version__)"
+
+if errorlevel 1 (
+    echo [ERROR] numpy installed but cannot import
+    pause
+    exit /b 1
+)
 echo.
 
 REM Install all other dependencies
