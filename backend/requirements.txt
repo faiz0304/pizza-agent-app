@@ -5,10 +5,18 @@
 # This requirements.txt is optimized for Python 3.12 with prebuilt wheels
 # All packages have been tested to install without Rust/Cargo compilation
 #
+# INSTALLATION NOTE (Windows):
+#   Use INSTALL-BACKEND-DEPS.bat which forces binary-only installation
+#   Manual install: pip install numpy==1.26.4 --only-binary=numpy
+#
+# If experiencing build errors, clear pip cache first:
+#   pip cache purge
+#
 # Last updated: 2026-01-03
 # ========================================================================
 
 # Core Dependencies - Install numpy first to avoid conflicts
+# NumPy 1.26.4 has prebuilt wheels for Python 3.12 (cp312-win_amd64)
 numpy==1.26.4
 
 # FastAPI & Server

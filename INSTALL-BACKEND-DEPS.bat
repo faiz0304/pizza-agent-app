@@ -1,7 +1,7 @@
 @echo off
 REM ========================================================================
-REM  Install Backend Dependencies (Python 3.12 Compatible)
-REM  Installs all required packages using prebuilt wheels
+REM  Install Backend Dependencies (Python 3.12 Compatible - Windows)
+REM  Installs all required packages using prebuilt wheels ONLY
 REM ========================================================================
 
 echo.
@@ -49,27 +49,38 @@ echo [OK] Core tools upgraded
 echo.
 
 REM ========================================================================
-REM  STEP 3: Install Dependencies
+REM  STEP 3: Install Dependencies (BINARY ONLY - No Source Compilation)
 REM ========================================================================
 
 echo [INFO] Installing dependencies from requirements.txt...
+echo [INFO] Using BINARY WHEELS ONLY (no source compilation)
 echo [INFO] This may take a few minutes...
 echo.
 
-REM Strategy: Install numpy first (has cp312 wheels), then everything else
-echo [STEP 3.1] Installing numpy 1.26.4...
-python -m pip install numpy==1.26.4
+REM Critical: Install numpy first with binary-only flag
+echo [STEP 3.1] Installing numpy 1.26.4 (binary wheel)...
+echo [INFO] Forcing binary installation to avoid GCC/Rust compilation...
+
+python -m pip install numpy==1.26.4 --only-binary=numpy
 
 if errorlevel 1 (
-    echo [ERROR] Failed to install numpy
-    echo [ERROR] Ensure you have internet connection
+    echo.
+    echo [ERROR] Failed to install numpy binary wheel
+    echo.
+    echo Troubleshooting:
+    echo   1. Check internet connection: ping pypi.org
+    echo   2. Clear pip cache: pip cache purge
+    echo   3. Try: pip install --upgrade pip
+    echo   4. Verify Python version: python --version (should be 3.12.x)
+    echo.
     pause
     exit /b 1
 )
 
-echo [OK] numpy installed
+echo [OK] numpy 1.26.4 installed from binary wheel
 echo.
 
+REM Install all other dependencies
 echo [STEP 3.2] Installing all other dependencies...
 python -m pip install -r requirements.txt
 
@@ -79,8 +90,8 @@ if errorlevel 1 (
     echo [ERROR] Check the error messages above
     echo.
     echo If you see build errors:
-    echo   1. Ensure you have the latest pip: pip install --upgrade pip
-    echo   2. Try: pip install -r requirements.txt --only-binary=:all:
+    echo   - Clear cache: pip cache purge
+    echo   - Reinstall: pip install -r requirements.txt --force-reinstall
     echo.
     pause
     exit /b 1
@@ -95,6 +106,7 @@ REM ========================================================================
 
 echo [INFO] Verifying critical imports...
 
+python -c "import numpy; print('[OK] numpy version:', numpy.__version__)" || goto :error
 python -c "import fastapi; print('[OK] fastapi')" || goto :error
 python -c "import pydantic; print('[OK] pydantic')" || goto :error
 python -c "import chromadb; print('[OK] chromadb')" || goto :error
@@ -109,6 +121,8 @@ echo.
 echo [SUCCESS] All backend dependencies installed successfully!
 echo.
 echo Python version: %PYTHON_VERSION%
+echo Installation method: Binary wheels only (no source compilation)
+echo.
 echo You can now run START-APP.bat to start the application.
 echo.
 pause
@@ -118,5 +132,11 @@ exit /b 0
 echo.
 echo [ERROR] Import verification failed
 echo [ERROR] Some packages did not install correctly
+echo.
+echo Please try:
+echo   1. Delete venv: rmdir /s /q venv
+echo   2. Recreate: python -m venv venv
+echo   3. Run this script again
+echo.
 pause
 exit /b 1
