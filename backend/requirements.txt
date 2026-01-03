@@ -1,17 +1,20 @@
 # ========================================================================
-# PYTHON VERSION: 3.12.x Compatible
+# PYTHON VERSION: 3.10.x Required
 # ========================================================================
 # 
-# This requirements.txt is optimized for Python 3.12 with prebuilt wheels
-# All packages have been tested to install without Rust/Cargo compilation
+# This project requires Python 3.10 for stable Windows binary wheel support
+# All packages have been tested with Python 3.10 (no compilation required)
 #
-# INSTALLATION NOTE (Windows):
-#   Use INSTALL-BACKEND-DEPS.bat which forces binary-only installation
-#   Manual install: pip install "numpy>=1.26,<2.0" --only-binary=numpy
+# INSTALLATION:
+#   1. Install Python 3.10.11: https://www.python.org/downloads/release/python-31011/
+#   2. Run: REBUILD-BACKEND-VENV.bat
+#   3. This creates fresh venv with Python 3.10 and installs all dependencies
 #
-# If experiencing build errors, clear pip cache first:
-#   pip cache purge
-#   pip install --upgrade pip
+# WHY PYTHON 3.10?:
+#   - All dependencies have stable binary wheels for Python 3.10 on Windows
+#   - numpy, faiss-cpu, pydantic, fastapi fully compatible
+#   - No Rust/GCC/source compilation required
+#   - Industry-standard version with long-term support
 #
 # Last updated: 2026-01-03
 # ========================================================================

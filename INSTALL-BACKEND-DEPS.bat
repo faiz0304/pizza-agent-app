@@ -20,15 +20,46 @@ echo [INFO] Checking virtual environment...
 
 if not exist "venv\Scripts\python.exe" (
     echo [ERROR] Virtual environment not found!
-    echo [ERROR] Create it first: python -m venv venv
+    echo [ERROR] Run: REBUILD-BACKEND-VENV.bat
     pause
     exit /b 1
 )
 
-REM Get Python version
+REM Get and validate Python version
 for /f "tokens=2" %%i in ('venv\Scripts\python.exe --version 2^>^&1') do set PYTHON_VERSION=%%i
-echo [OK] Using Python %PYTHON_VERSION%
+echo [INFO] Virtual environment Python: %PYTHON_VERSION%
+
+REM Extract major and minor version
+for /f "tokens=1,2 delims=." %%a in ("%PYTHON_VERSION%") do (
+    set PYTHON_MAJOR=%%a
+    set PYTHON_MINOR=%%b
+)
+
+REM Check if Python 3.10
+if not "%PYTHON_MAJOR%"=="3" goto :version_error
+if not "%PYTHON_MINOR%"=="10" goto :version_error
+
+echo [OK] Python 3.10 confirmed
 echo.
+goto :upgrade_pip
+
+:version_error
+echo.
+echo ========================================================================
+echo  [ERROR] INCOMPATIBLE PYTHON VERSION
+echo ========================================================================
+echo.
+echo Your venv is using Python %PYTHON_VERSION%
+echo This project requires Python 3.10.x
+echo.
+echo [SOLUTION] Rebuild your virtual environment:
+echo   1. Install Python 3.10.11
+echo   2. Run: REBUILD-BACKEND-VENV.bat
+echo.
+pause
+exit /b 1
+
+:upgrade_pip
 
 REM ========================================================================
 REM  STEP 2: Upgrade pip and core tools

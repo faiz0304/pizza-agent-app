@@ -1,8 +1,8 @@
 @echo off
 REM ========================================================================
-REM  REBUILD BACKEND VIRTUAL ENVIRONMENT
+REM  REBUILD BACKEND VIRTUAL ENVIRONMENT (Python 3.10 Required)
 REM  Run this to completely rebuild your backend environment with
-REM  a supported Python version (3.10.x or 3.11.x)
+REM  Python 3.10 for stable Windows compatibility
 REM ========================================================================
 
 setlocal enabledelayedexpansion
@@ -16,80 +16,65 @@ echo.
 cd /d "%~dp0backend"
 
 REM ========================================================================
-REM  STEP 1: Validate Python Version
+REM  STEP 1: Find Python 3.10
 REM ========================================================================
 
-echo [STEP 1] Validating Python version...
+echo [STEP 1] Finding Python 3.10...
 echo.
 
-REM Get Python version
-for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PYTHON_VERSION=%%i
+REM Try common Python 3.10 locations
+set PYTHON310=
 
-echo [INFO] Detected Python version: %PYTHON_VERSION%
-
-REM Extract major and minor version
-for /f "tokens=1,2 delims=." %%a in ("%PYTHON_VERSION%") do (
-    set PYTHON_MAJOR=%%a
-    set PYTHON_MINOR=%%b
+REM Try py launcher first (most reliable on Windows)
+py -3.10 --version >nul 2>&1
+if %errorlevel% equ 0 (
+    set PYTHON310=py -3.10
+    for /f "tokens=2" %%i in ('py -3.10 --version') do set PYTHON_VERSION=%%i
+    echo [OK] Found Python via py launcher: !PYTHON_VERSION!
+    goto :python_found
 )
 
-echo [INFO] Python %PYTHON_MAJOR%.%PYTHON_MINOR%
+REM Try python3.10 in PATH
+python3.10 --version >nul 2>&1
+if %errorlevel% equ 0 (
+    set PYTHON310=python3.10
+    for /f "tokens=2" %%i in ('python3.10 --version') do set PYTHON_VERSION=%%i
+    echo [OK] Found python3.10: !PYTHON_VERSION!
+    goto :python_found
+)
+
+REM Try default python if it's 3.10
+python --version 2>&1 | findstr "3.10" >nul
+if %errorlevel% equ 0 (
+    set PYTHON310=python
+    for /f "tokens=2" %%i in ('python --version') do set PYTHON_VERSION=%%i
+    echo [OK] Found Python 3.10 as default: !PYTHON_VERSION!
+    goto :python_found
+)
+
+REM Python 3.10 not found
+echo ========================================================================
+echo  [ERROR] PYTHON 3.10 NOT FOUND
+echo ========================================================================
 echo.
+echo This project requires Python 3.10 for Windows compatibility.
+echo.
+echo [DOWNLOAD PYTHON 3.10.11]:
+echo   https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe
+echo.
+echo [INSTALLATION INSTRUCTIONS]:
+echo   1. Download the installer from the link above
+echo   2. Run the installer
+echo   3. CHECK "Add Python 3.10 to PATH"
+echo   4. Complete installation
+echo   5. Verify: py -3.10 --version
+echo   6. Run this script again
+echo.
+echo ========================================================================
+pause
+exit /b 1
 
-REM Check if Python 3.12 or higher
-if %PYTHON_MAJOR% GEQ 3 (
-    if %PYTHON_MINOR% GEQ 12 (
-        echo ========================================================================
-        echo  [ERROR] UNSUPPORTED PYTHON VERSION DETECTED
-        echo ========================================================================
-        echo.
-        echo Your Python version: %PYTHON_VERSION%
-        echo Supported versions:  3.10.x or 3.11.x
-        echo.
-        echo [REASON] Python 3.12+ is NOT compatible with FastAPI ecosystem
-        echo          - pydantic-core has no stable wheels for Python 3.12+
-        echo          - chromadb breaks on Python 3.12+
-        echo          - Attempting installation triggers Rust compilation
-        echo.
-        echo [SOLUTION] Install Python 3.11.x:
-        echo.
-        echo   1. Download Python 3.11.9 for Windows x64:
-        echo      https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe
-        echo.
-        echo   2. During installation:
-        echo      - Check "Add Python to PATH"
-        echo      - Select "Install for all users" (optional)
-        echo.
-        echo   3. After installation, verify:
-        echo      python --version
-        echo      (Should show Python 3.11.x)
-        echo.
-        echo   4. Re-run this script
-        echo.
-        echo ========================================================================
-        pause
-        exit /b 1
-    )
-)
-
-REM Check if Python version is too old
-if %PYTHON_MAJOR% LSS 3 (
-    echo [ERROR] Python 3.10 or 3.11 is required
-    echo [ERROR] Your version: %PYTHON_VERSION%
-    pause
-    exit /b 1
-)
-
-if %PYTHON_MAJOR% EQU 3 (
-    if %PYTHON_MINOR% LSS 10 (
-        echo [ERROR] Python 3.10 or 3.11 is required
-        echo [ERROR] Your version: %PYTHON_VERSION%
-        pause
-        exit /b 1
-    )
-)
-
-echo [OK] Python version is supported (%PYTHON_VERSION%)
+:python_found
 echo.
 
 REM ========================================================================
@@ -116,14 +101,14 @@ if exist "venv" (
 echo.
 
 REM ========================================================================
-REM  STEP 3: Create New Virtual Environment
+REM  STEP 3: Create New Virtual Environment with Python 3.10
 REM ========================================================================
 
-echo [STEP 3] Creating new virtual environment...
+echo [STEP 3] Creating new virtual environment with Python 3.10...
 echo.
 
-echo [INFO] Running: python -m venv venv
-python -m venv venv
+echo [INFO] Running: %PYTHON310% -m venv venv
+%PYTHON310% -m venv venv
 
 if errorlevel 1 (
     echo [ERROR] Failed to create virtual environment
@@ -131,7 +116,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [OK] Virtual environment created
+echo [OK] Virtual environment created with Python 3.10
 echo.
 
 REM ========================================================================
@@ -162,10 +147,20 @@ echo [STEP 5] Installing dependencies...
 echo.
 
 echo [INFO] This may take several minutes...
-echo [INFO] Installing numpy first to avoid conflicts...
-python -m pip install "numpy<2.0"
-
 echo.
+
+echo [INFO] Installing numpy first...
+python -m pip install "numpy>=1.26,<2.0"
+
+if errorlevel 1 (
+    echo [ERROR] Failed to install numpy
+    pause
+    exit /b 1
+)
+
+echo [OK] numpy installed
+echo.
+
 echo [INFO] Installing all dependencies from requirements.txt...
 python -m pip install -r requirements.txt
 
@@ -173,11 +168,6 @@ if errorlevel 1 (
     echo.
     echo [ERROR] Failed to install dependencies
     echo [ERROR] Check the error messages above
-    echo.
-    echo Common issues:
-    echo - Internet connection required
-    echo - Firewall blocking pip downloads
-    echo - Disk space insufficient
     echo.
     pause
     exit /b 1
@@ -195,10 +185,13 @@ echo.
 
 echo [INFO] Testing critical imports...
 
-python -c "import fastapi; print('[OK] fastapi imported')"
-python -c "import pydantic; print('[OK] pydantic imported')"
-python -c "import chromadb; print('[OK] chromadb imported')"
-python -c "import uvicorn; print('[OK] uvicorn imported')"
+python -c "import sys; print('[OK] Python version:', sys.version.split()[0])"
+python -c "import numpy; print('[OK] numpy:', numpy.__version__)"
+python -c "import fastapi; print('[OK] fastapi')"
+python -c "import pydantic; print('[OK] pydantic')"
+python -c "import faiss; print('[OK] faiss')"
+python -c "import uvicorn; print('[OK] uvicorn')"
+python -c "import pymongo; print('[OK] pymongo')"
 
 if errorlevel 1 (
     echo [ERROR] Import verification failed
@@ -214,7 +207,7 @@ echo.
 echo [SUCCESS] Backend environment rebuilt successfully!
 echo.
 echo Python version: %PYTHON_VERSION%
-echo Virtual environment: backend\venv
+echo Virtual environment: backend\venv (Python 3.10)
 echo.
 echo Next steps:
 echo   1. Run START-APP.bat to start the application

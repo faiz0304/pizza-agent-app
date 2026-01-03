@@ -46,13 +46,61 @@ if not exist "%FRONTEND_DIR%" (
 REM Check if Python virtual environment exists
 if not exist "%BACKEND_DIR%\venv\Scripts\activate.bat" (
     echo [ERROR] Python virtual environment not found
-    echo [ERROR] Run: python -m venv venv in backend directory
+    echo [ERROR] Run: REBUILD-BACKEND-VENV.bat
     pause
     exit /b 1
 )
 
-REM Check if dependencies are installed (quick check for chromadb)
-"%BACKEND_DIR%\venv\Scripts\python.exe" -c "import chromadb" >nul 2>&1
+REM Validate Python 3.10 in venv
+echo [INFO] Validating Python version...
+for /f "tokens=2" %%i in ('"%BACKEND_DIR%\venv\Scripts\python.exe" --version 2^>^&1') do set PYTHON_VERSION=%%i
+
+echo [INFO] Backend venv using: Python %PYTHON_VERSION%
+
+REM Extract major and minor version
+for /f "tokens=1,2 delims=." %%a in ("%PYTHON_VERSION%") do (
+    set PYTHON_MAJOR=%%a
+    set PYTHON_MINOR=%%b
+)
+
+REM Check if Python 3.10
+if not "%PYTHON_MAJOR%"=="3" (
+    goto :version_error
+)
+if not "%PYTHON_MINOR%"=="10" (
+    goto :version_error
+)
+
+echo [OK] Python 3.10 detected
+echo.
+goto :check_deps
+
+:version_error
+echo.
+echo ========================================================================
+echo  [ERROR] INCORRECT PYTHON VERSION
+echo ========================================================================
+echo.
+echo Your backend venv is using: Python %PYTHON_VERSION%
+echo Required version: Python 3.10.x
+echo.
+echo [REASON]
+echo   This project requires Python 3.10 for stable Windows compatibility
+echo   All dependencies have binary wheels for Python 3.10
+echo.
+echo [SOLUTION] Rebuild venv with Python 3.10:
+echo   1. Install Python 3.10.11
+echo      https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe
+echo.
+echo   2. Run: REBUILD-BACKEND-VENV.bat
+echo.
+echo ========================================================================
+pause
+exit /b 1
+
+:check_deps
+REM Check if dependencies are installed (quick check for faiss)
+"%BACKEND_DIR%\venv\Scripts\python.exe" -c "import faiss" >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] Backend dependencies not installed
     echo.
