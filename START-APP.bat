@@ -46,10 +46,52 @@ if not exist "%FRONTEND_DIR%" (
 REM Check if Python virtual environment exists
 if not exist "%BACKEND_DIR%\venv\Scripts\activate.bat" (
     echo [ERROR] Python virtual environment not found
-    echo [ERROR] Please create venv first: cd backend ^&^& python -m venv venv
+    echo [ERROR] Run: REBUILD-BACKEND-VENV.bat
     pause
     exit /b 1
 )
+
+REM Validate Python version in venv
+echo [INFO] Validating Python version...
+for /f "tokens=2" %%i in ('"%BACKEND_DIR%\venv\Scripts\python.exe" --version 2^>^&1') do set PYTHON_VERSION=%%i
+
+for /f "tokens=1,2 delims=." %%a in ("%PYTHON_VERSION%") do (
+    set PYTHON_MAJOR=%%a
+    set PYTHON_MINOR=%%b
+)
+
+if %PYTHON_MAJOR% GEQ 3 (
+    if %PYTHON_MINOR% GEQ 12 (
+        echo.
+        echo ========================================================================
+        echo  [CRITICAL ERROR] INCOMPATIBLE PYTHON VERSION
+        echo ========================================================================
+        echo.
+        echo Your backend venv is using: Python %PYTHON_VERSION%
+        echo Supported versions: Python 3.10.x or 3.11.x
+        echo.
+        echo [REASON]
+        echo   Python 3.12+ breaks FastAPI/Pydantic/ChromaDB ecosystem
+        echo   - pydantic-core has no wheels for Python 3.12+
+        echo   - Installation triggers Rust/Cargo compilation
+        echo   - chromadb and sentence-transformers fail
+        echo.
+        echo [SOLUTION] Rebuild with supported Python:
+        echo   1. Download Python 3.11.9:
+        echo      https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe
+        echo.
+        echo   2. Install Python 3.11.9
+        echo.
+        echo   3. Run: REBUILD-BACKEND-VENV.bat
+        echo.
+        echo ========================================================================
+        pause
+        exit /b 1
+    )
+)
+
+echo [OK] Python %PYTHON_VERSION% is compatible
+echo.
 
 REM Check if dependencies are installed (quick check for chromadb)
 "%BACKEND_DIR%\venv\Scripts\python.exe" -c "import chromadb" >nul 2>&1

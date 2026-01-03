@@ -1,3 +1,23 @@
+# ========================================================================
+# PYTHON VERSION REQUIREMENT: 3.10.x or 3.11.x ONLY
+# ========================================================================
+# 
+# Python 3.12+ is NOT supported due to:
+#   - No stable pydantic-core wheels (triggers Rust compilation)
+#   - chromadb incompatibility
+#   - sentence-transformers build failures
+#
+# To install Python 3.11.9 (recommended):
+#   https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe
+#
+# After installing Python 3.11, rebuild your venv:
+#   Run: REBUILD-BACKEND-VENV.bat
+#
+# ========================================================================
+
+# Core Dependencies - Install numpy first to avoid conflicts
+numpy<2.0
+
 # FastAPI & Server
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
