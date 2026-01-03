@@ -35,7 +35,7 @@ pymongo==4.10.1
 motor==3.6.0
 
 # Vector Store & Embeddings (Python 3.12 compatible versions)
-chromadb==0.5.23
+faiss-cpu==1.9.0
 sentence-transformers==3.3.1
 
 # LLM Integration

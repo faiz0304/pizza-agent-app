@@ -1,13 +1,13 @@
 """
-RAG Tool - Knowledge Base Search using Chroma Vector Store
+RAG Tool - Knowledge Base Search using FAISS Vector Store
 """
 import os
 import logging
+import pickle
+import numpy as np
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
-import chromadb
-from chromadb.config import Settings
-from chromadb.utils import embedding_functions
+import faiss
 
 from utils.embeddings import embed_text
 
@@ -18,36 +18,83 @@ logger = logging.getLogger(__name__)
 
 class RAGSearchTool:
     """
-    Knowledge Base Search Tool using Chroma DB
+    Knowledge Base Search Tool using FAISS
     Performs semantic search over customer support knowledge base
     """
     
     def __init__(self):
-        self.persist_dir = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
-        self.collection_name = os.getenv("CHROMA_COLLECTION_NAME", "customer_support_kb")
-        self.client = None
-        self.collection = None
-        self._initialize_chroma()
+        self.persist_dir = os.getenv("FAISS_PERSIST_DIR", "./faiss_db")
+        self.index_file = os.path.join(self.persist_dir, "index.faiss")
+        self.metadata_file = os.path.join(self.persist_dir, "metadata.pkl")
+        self.index = None
+        self.documents = []
+        self.metadatas = []
+        self.ids = []
+        self.dimension = 768  # Default embedding dimension (sentence-transformers)
+        self._initialize_faiss()
     
-    def _initialize_chroma(self):
-        """Initialize Chroma DB client and collection"""
+    def _initialize_faiss(self):
+        """Initialize FAISS index and load existing data if available"""
         try:
-            # Create Chroma client with persistent storage
-            self.client = chromadb.PersistentClient(path=self.persist_dir)
+            # Create persist directory if it doesn't exist
+            os.makedirs(self.persist_dir, exist_ok=True)
             
-            # Get or create collection
-            # Using default embedding function (can be customized)
-            self.collection = self.client.get_or_create_collection(
-                name=self.collection_name,
-                metadata={"description": "Customer support knowledge base for pizza ordering"}
-            )
-            
-            logger.info(f"✅ Chroma DB initialized: {self.collection_name}")
-            logger.info(f"Collection count: {self.collection.count()} documents")
+            # Try to load existing index
+            if os.path.exists(self.index_file) and os.path.exists(self.metadata_file):
+                self._load_index()
+                logger.info(f"✅ FAISS index loaded from disk")
+                logger.info(f"Index count: {len(self.documents)} documents")
+            else:
+                # Create new index
+                self.index = faiss.IndexFlatL2(self.dimension)
+                logger.info(f"✅ FAISS index initialized (new)")
+                logger.info(f"Index count: 0 documents")
             
         except Exception as e:
-            logger.error(f"❌ Failed to initialize Chroma DB: {e}")
+            logger.error(f"❌ Failed to initialize FAISS: {e}")
             raise
+    
+    def _load_index(self):
+        """Load FAISS index and metadata from disk"""
+        try:
+            # Load FAISS index
+            self.index = faiss.read_index(self.index_file)
+            
+            # Load metadata
+            with open(self.metadata_file, 'rb') as f:
+                data = pickle.load(f)
+                self.documents = data['documents']
+                self.metadatas = data['metadatas']
+                self.ids = data['ids']
+                self.dimension = data.get('dimension', 768)
+            
+            logger.info(f"Loaded {len(self.documents)} documents from disk")
+        except Exception as e:
+            logger.error(f"Error loading index: {e}")
+            # Fallback to new index
+            self.index = faiss.IndexFlatL2(self.dimension)
+            self.documents = []
+            self.metadatas = []
+            self.ids = []
+    
+    def _save_index(self):
+        """Save FAISS index and metadata to disk"""
+        try:
+            # Save FAISS index
+            faiss.write_index(self.index, self.index_file)
+            
+            # Save metadata
+            with open(self.metadata_file, 'wb') as f:
+                pickle.dump({
+                    'documents': self.documents,
+                    'metadatas': self.metadatas,
+                    'ids': self.ids,
+                    'dimension': self.dimension
+                }, f)
+            
+            logger.info(f"Saved {len(self.documents)} documents to disk")
+        except Exception as e:
+            logger.error(f"Error saving index: {e}")
     
     def add_documents(
         self, 
@@ -65,15 +112,18 @@ class RAGSearchTool:
         """
         try:
             # Generate embeddings
-            embeddings = [embed_text(doc) for doc in documents]
+            embeddings = np.array([embed_text(doc) for doc in documents], dtype='float32')
             
-            # Add to collection
-            self.collection.add(
-                documents=documents,
-                metadatas=metadatas,
-                ids=ids,
-                embeddings=embeddings
-            )
+            # Add to FAISS index
+            self.index.add(embeddings)
+            
+            # Store documents and metadata
+            self.documents.extend(documents)
+            self.metadatas.extend(metadatas)
+            self.ids.extend(ids)
+            
+            # Save to disk
+            self._save_index()
             
             logger.info(f"Added {len(documents)} documents to knowledge base")
             
@@ -98,24 +148,27 @@ class RAGSearchTool:
                 logger.warning("Empty search query provided")
                 return []
             
-            # Generate query embedding
-            query_embedding = embed_text(query)
+            # Handle empty index
+            if len(self.documents) == 0:
+                logger.warning("Knowledge base is empty")
+                return []
             
-            # Search in Chroma
-            results = self.collection.query(
-                query_embeddings=[query_embedding],
-                n_results=top_k
-            )
+            # Generate query embedding
+            query_embedding = np.array([embed_text(query)], dtype='float32')
+            
+            # Search in FAISS
+            top_k = min(top_k, len(self.documents))  # Don't request more than we have
+            distances, indices = self.index.search(query_embedding, top_k)
             
             # Format results
             formatted_results = []
-            if results and results.get("documents"):
-                for idx in range(len(results["documents"][0])):
+            for idx, distance in zip(indices[0], distances[0]):
+                if idx < len(self.documents):  # Valid index
                     formatted_results.append({
-                        "text": results["documents"][0][idx],
-                        "metadata": results["metadatas"][0][idx] if results.get("metadatas") else {},
-                        "score": results["distances"][0][idx] if results.get("distances") else 0.0,
-                        "id": results["ids"][0][idx] if results.get("ids") else None
+                        "text": self.documents[idx],
+                        "metadata": self.metadatas[idx] if idx < len(self.metadatas) else {},
+                        "score": float(distance),  # L2 distance (lower is better)
+                        "id": self.ids[idx] if idx < len(self.ids) else None
                     })
             
             logger.info(f"Found {len(formatted_results)} results for query: '{query[:50]}...'")
@@ -128,15 +181,20 @@ class RAGSearchTool:
     def get_collection_stats(self) -> Dict[str, Any]:
         """Get statistics about the knowledge base"""
         try:
-            count = self.collection.count()
+            count = len(self.documents)
             return {
-                "collection_name": self.collection_name,
+                "collection_name": "faiss_knowledge_base",
                 "document_count": count,
-                "persist_dir": self.persist_dir
+                "persist_dir": self.persist_dir,
+                "index_dimension": self.dimension
             }
         except Exception as e:
             logger.error(f"Error getting collection stats: {e}")
             return {}
+    
+    def count(self) -> int:
+        """Get document count in the knowledge base"""
+        return len(self.documents)
 
 
 # Global RAG tool instance
@@ -163,7 +221,7 @@ def initialize_knowledge_base():
     Should be called once during app startup
     """
     # Check if KB already has content
-    if rag_tool.collection.count() > 0:
+    if rag_tool.count() > 0:
         logger.info("Knowledge base already initialized")
         return
     
@@ -205,7 +263,7 @@ def initialize_knowledge_base():
         "Nutritional info available on request. Average medium pizza: 1200-1500 calories. Veggie options are lower in calories. Gluten-free crust available for +$3. Ask for our nutrition guide!",
         
         # Loyalty Program
-        "Join our Pizza Rewards program! Earn 1 point per dollar spent. 100 points = $10 off. Birthday month rewards: Free dessert pizza! Refer a friend and both get 50 bonus points."
+        "Join our Pizza Rewards program! Earn 1 point per dollar spent. 100 points = $10 off. Birthday month rewards: Free dessert pizza! Refer a friend and both get 50 bonus points!"
     ]
     
     # Metadata for each document

@@ -123,7 +123,7 @@ echo [INFO] Verifying critical imports...
 python -c "import numpy; print('[OK] numpy version:', numpy.__version__)" || goto :error
 python -c "import fastapi; print('[OK] fastapi')" || goto :error
 python -c "import pydantic; print('[OK] pydantic')" || goto :error
-python -c "import chromadb; print('[OK] chromadb')" || goto :error
+python -c "import faiss; print('[OK] faiss')" || goto :error
 python -c "import uvicorn; print('[OK] uvicorn')" || goto :error
 python -c "import pymongo; print('[OK] pymongo')" || goto :error
 
