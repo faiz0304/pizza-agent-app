@@ -34,7 +34,8 @@ pydantic==2.10.3
 pydantic-settings==2.6.1
 
 # Database
-pymongo==4.10.1
+# motor 3.6.0 requires pymongo >=4.9,<4.10
+pymongo==4.9.2
 motor==3.6.0
 
 # Vector Store & Embeddings (Python 3.12 compatible versions)
