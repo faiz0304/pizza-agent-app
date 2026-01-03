@@ -160,6 +160,188 @@ class Database:
             return user_data
         
         return user
+    
+    # User Preference Methods (Long-term Memory)
+    def get_user_preferences(self, user_id: str) -> Optional[Dict]:
+        """
+        Get user preferences from long-term memory
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            User preferences dict or None if not found
+        """
+        collection = self.get_collection("user_preferences")
+        return collection.find_one({"user_id": user_id})
+    
+    def upsert_user_preferences(self, user_id: str, preferences: Dict) -> bool:
+        """
+        Insert or update user preferences
+        
+        Args:
+            user_id: User identifier
+            preferences: Preferences dict to store
+            
+        Returns:
+            True if successful
+        """
+        from datetime import datetime
+        collection = self.get_collection("user_preferences")
+        
+        # Add/update timestamp
+        preferences["updated_at"] = datetime.utcnow()
+        if "created_at" not in preferences:
+            preferences["created_at"] = datetime.utcnow()
+        
+        result = collection.update_one(
+            {"user_id": user_id},
+            {"$set": preferences},
+            upsert=True
+        )
+        
+        return result.acknowledged
+    
+    def update_language_preference(self, user_id: str, language: str) -> bool:
+        """
+        Update user's language preference
+        
+        Args:
+            user_id: User identifier
+            language: Language code (english, roman_urdu, roman_hindi)
+            
+        Returns:
+            True if successful
+        """
+        from datetime import datetime
+        collection = self.get_collection("user_preferences")
+        
+        result = collection.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "language_preference": language,
+                    "updated_at": datetime.utcnow()
+                },
+                "$setOnInsert": {
+                    "created_at": datetime.utcnow(),
+                    "preferences": {},
+                    "behavior_patterns": {}
+                }
+            },
+            upsert=True
+        )
+        
+        return result.acknowledged
+    
+    def get_user_favorites(self, user_id: str) -> List[str]:
+        """
+        Get user's favorite items
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            List of favorite item names
+        """
+        prefs = self.get_user_preferences(user_id)
+        if prefs and "preferences" in prefs:
+            return prefs["preferences"].get("favorite_items", [])
+        return []
+    
+    def track_order_completion(
+        self, 
+        user_id: str, 
+        order_id: str, 
+        items: List[Dict],
+        total: float
+    ) -> bool:
+        """
+        Track order completion and update user preferences
+        
+        Args:
+            user_id: User identifier
+            order_id: Order ID
+            items: List of ordered items
+            total: Order total
+            
+        Returns:
+            True if successful
+        """
+        from datetime import datetime
+        collection = self.get_collection("user_preferences")
+        
+        # Extract pizza names from items
+        pizza_names = [item.get("name") for item in items if "name" in item]
+        
+        # Get current preferences
+        prefs = self.get_user_preferences(user_id)
+        
+        if prefs:
+            # Update existing preferences
+            favorites = prefs.get("preferences", {}).get("favorite_items", [])
+            
+            # Add new pizzas to favorites (keep unique, max 5)
+            for pizza in pizza_names:
+                if pizza not in favorites:
+                    favorites.append(pizza)
+            favorites = favorites[-5:]  # Keep last 5
+            
+            # Update behavior patterns
+            order_count = prefs.get("behavior_patterns", {}).get("order_count", 0) + 1
+            current_avg = prefs.get("behavior_patterns", {}).get("average_order_value", 0.0)
+            new_avg = ((current_avg * (order_count - 1)) + total) / order_count
+            
+            result = collection.update_one(
+                {"user_id": user_id},
+                {
+                    "$set": {
+                        "preferences.favorite_items": favorites,
+                        "behavior_patterns.order_count": order_count,
+                        "behavior_patterns.average_order_value": round(new_avg, 2),
+                        "last_successful_order_id": order_id,
+                        "updated_at": datetime.utcnow()
+                    }
+                }
+            )
+        else:
+            # Create new preferences
+            new_prefs = {
+                "user_id": user_id,
+                "preferences": {
+                    "favorite_items": pizza_names[:5],  # Max 5
+                    "diet_type": "mixed",
+                    "payment_method": "cod"
+                },
+                "behavior_patterns": {
+                    "order_count": 1,
+                    "average_order_value": round(total, 2)
+                },
+                "language_preference": "english",
+                "last_successful_order_id": order_id,
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow()
+            }
+            result = collection.insert_one(new_prefs)
+        
+        return result.acknowledged if hasattr(result, 'acknowledged') else True
+    
+    def create_preference_indexes(self):
+        """Create indexes for user_preferences collection"""
+        try:
+            collection = self.get_collection("user_preferences")
+            
+            # Create unique index on user_id
+            collection.create_index("user_id", unique=True)
+            
+            # Create sparse index on whatsapp_number
+            collection.create_index("whatsapp_number", unique=True, sparse=True)
+            
+            logger.info("✅ Created indexes for user_preferences collection")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Error creating indexes: {e}")
+            return False
 
 
 # Global database instance
