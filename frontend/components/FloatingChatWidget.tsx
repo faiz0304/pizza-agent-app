@@ -11,16 +11,60 @@ interface Message {
 
 export default function FloatingChatWidget() {
     const [isOpen, setIsOpen] = useState(false);
-    const [messages, setMessages] = useState<Message[]>([
-        {
-            role: 'assistant',
-            content: 'Hi! I\'m AGENT-X, your pizza ordering assistant. How can I help you today?',
-            timestamp: new Date()
-        }
-    ]);
+    const [messages, setMessages] = useState<Message[]>([]);
     const [inputMessage, setInputMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const STORAGE_KEY = 'chat_history_web_user';
+    const MAX_MESSAGES = 25;
+
+    // Load messages from localStorage on mount
+    useEffect(() => {
+        const loadMessages = () => {
+            try {
+                const stored = localStorage.getItem(STORAGE_KEY);
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    // Ensure timestamps are Date objects
+                    const messagesWithDates = parsed.map((msg: any) => ({
+                        ...msg,
+                        timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date()
+                    }));
+                    // Limit to last 25 messages
+                    setMessages(messagesWithDates.slice(-MAX_MESSAGES));
+                } else {
+                    // Default welcome message
+                    setMessages([{
+                        role: 'assistant',
+                        content: 'Hi! I\'m AGENT-X, your pizza ordering assistant. How can I help you today?',
+                        timestamp: new Date()
+                    }]);
+                }
+            } catch (error) {
+                console.error('Failed to load chat history:', error);
+                setMessages([{
+                    role: 'assistant',
+                    content: 'Hi! I\'m AGENT-X, your pizza ordering assistant. How can I help you today?',
+                    timestamp: new Date()
+                }]);
+            }
+        };
+
+        loadMessages();
+    }, []);
+
+    // Save messages to localStorage whenever they change
+    useEffect(() => {
+        if (messages.length > 0) {
+            try {
+                // Keep only last 25 messages
+                const messagesToSave = messages.slice(-MAX_MESSAGES);
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(messagesToSave));
+            } catch (error) {
+                console.error('Failed to save chat history:', error);
+            }
+        }
+    }, [messages]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -39,20 +83,22 @@ export default function FloatingChatWidget() {
             timestamp: new Date()
         };
 
-        setMessages(prev => [...prev, userMessage]);
+        // Add user message and enforce 25 message limit
+        const updatedMessages = [...messages, userMessage].slice(-MAX_MESSAGES);
+        setMessages(updatedMessages);
         setInputMessage('');
         setIsLoading(true);
 
         try {
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-            // Prepare conversation history for context
-            const history = messages.slice(0, -1).map(msg => ({
+            // Prepare last 25 messages for context (excluding current user message)
+            const history = updatedMessages.slice(0, -1).map(msg => ({
                 role: msg.role,
                 content: msg.content
             }));
 
-            console.log('Sending chat request to:', `${apiUrl}/chatbot/`);
+            console.log(`Sending ${history.length} messages as context to backend`);
 
             const response = await fetch(`${apiUrl}/chatbot/`, {
                 method: 'POST',
@@ -62,11 +108,9 @@ export default function FloatingChatWidget() {
                 body: JSON.stringify({
                     user_id: 'web_user',
                     message: inputMessage,
-                    conversation_history: history
+                    conversation_history: history  // Send all available history (up to 25)
                 })
             });
-
-            console.log('Response status:', response.status);
 
             if (!response.ok) {
                 const errorText = await response.text();
@@ -75,7 +119,6 @@ export default function FloatingChatWidget() {
             }
 
             const data = await response.json();
-            console.log('API response:', data);
 
             const assistantMessage: Message = {
                 role: 'assistant',
@@ -83,7 +126,8 @@ export default function FloatingChatWidget() {
                 timestamp: new Date()
             };
 
-            setMessages(prev => [...prev, assistantMessage]);
+            // Add assistant message and enforce 25 limit again
+            setMessages(prev => [...prev, assistantMessage].slice(-MAX_MESSAGES));
         } catch (error) {
             console.error('Chat error:', error);
             const errorMessage: Message = {
@@ -91,7 +135,7 @@ export default function FloatingChatWidget() {
                 content: 'Sorry, I\'m having trouble connecting. Please try again.',
                 timestamp: new Date()
             };
-            setMessages(prev => [...prev, errorMessage]);
+            setMessages(prev => [...prev, errorMessage].slice(-MAX_MESSAGES));
         } finally {
             setIsLoading(false);
         }
@@ -101,6 +145,25 @@ export default function FloatingChatWidget() {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             handleSendMessage();
+        }
+    };
+
+    const handleClearChat = () => {
+        const confirmClear = window.confirm('Clear all chat history?');
+        if (confirmClear) {
+            // Reset to initial welcome message
+            const welcomeMessage: Message = {
+                role: 'assistant',
+                content: 'Hi! I\'m AGENT-X, your pizza ordering assistant. How can I help you today?',
+                timestamp: new Date()
+            };
+            setMessages([welcomeMessage]);
+            localStorage.removeItem(STORAGE_KEY);
+
+            // Also clear from backend
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+            fetch(`${apiUrl}/chatbot/session/web_user`, { method: 'DELETE' })
+                .catch(err => console.error('Failed to clear server session:', err));
         }
     };
 
@@ -139,15 +202,24 @@ export default function FloatingChatWidget() {
                                 <span className="text-2xl">🤖</span>
                                 <div>
                                     <h3 className="font-bold text-white">AI Assistant</h3>
-                                    <p className="text-xs text-white/80">Agent-X Pizza</p>
+                                    <p className="text-xs text-white/80">Agent-X Pizza • {messages.length}/{MAX_MESSAGES} msgs</p>
                                 </div>
                             </div>
-                            <button
-                                onClick={() => setIsOpen(false)}
-                                className="text-white hover:bg-white/20 rounded-lg p-2 transition-colors"
-                            >
-                                ✕
-                            </button>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handleClearChat}
+                                    className="text-white hover:bg-white/20 rounded-lg p-2 transition-colors"
+                                    title="Clear chat history"
+                                >
+                                    🗑️
+                                </button>
+                                <button
+                                    onClick={() => setIsOpen(false)}
+                                    className="text-white hover:bg-white/20 rounded-lg p-2 transition-colors"
+                                >
+                                    ✕
+                                </button>
+                            </div>
                         </div>
 
                         {/* Messages */}

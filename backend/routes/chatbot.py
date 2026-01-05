@@ -104,6 +104,21 @@ async def chat(request: ChatRequest):
         if pending_order and is_confirmation:
             # User is confirming a pending order - execute it now
             logger.info(f"✅ User {request.user_id} confirmed pending order")
+            logger.debug(f"📦 Pending order details: {pending_order}")
+            
+            # Validate that pending order has items
+            items = pending_order.get("items", [])
+            if not items or len(items) == 0:
+                logger.warning(f"⚠️ Pending order for {request.user_id} has no items")
+                reply_text = "I'm sorry, I don't have any items in your pending order. Could you please tell me what pizza you'd like to order?"
+                memory.add_message(request.user_id, "assistant", reply_text)
+                memory.clear_pending_order(request.user_id)
+                
+                return ChatResponse(
+                    reply=reply_text,
+                    status="error",
+                    timestamp=datetime.utcnow().isoformat()
+                )
             
             # Execute the pending order
             from agent.tools_registry import get_tool_registry
@@ -134,8 +149,12 @@ async def chat(request: ChatRequest):
                     
                     reply_text = f"🎉 Order confirmed!\n\n📋 Order ID: {order_id}\n💰 Total: ${total}\n\n✅ Your pizza will be delivered in 25-35 minutes!"
                 else:
-                    reply_text = f"❌ Sorry, there was an issue placing your order: {order_result.get('error', 'Unknown error')}"
+                    error_msg = order_result.get('error', 'Unknown error')
+                    logger.error(f"❌ Order creation failed: {error_msg}")
+                    reply_text = f"❌ Sorry, there was an issue placing your order: {error_msg}. Please try ordering again."
             else:
+                error_msg = result.get('error', 'Tool execution failed')
+                logger.error(f"❌ Tool execution failed: {error_msg}")
                 reply_text = "❌ Sorry, I couldn't complete your order. Please try again."
             
             memory.add_message(request.user_id, "assistant", reply_text)
@@ -339,3 +358,73 @@ def _format_tool_result(tool_name: str, tool_result: Any, thought: str = "") -> 
 async def chatbot_health():
     """Health check for chatbot service"""
     return {"status": "healthy", "service": "chatbot"}
+
+
+@router.get("/session/{user_id}")
+async def get_session(user_id: str):
+    """
+    Retrieve chat session history
+    
+    Args:
+        user_id: User identifier
+        
+    Returns:
+        Session history with last 25 messages
+    """
+    try:
+        from utils.memory import get_conversation_memory
+        
+        memory = get_conversation_memory()
+        history = memory.get_history(user_id, last_n=25)
+        
+        # Convert datetime to ISO strings for JSON response
+        serialized_history = []
+        for msg in history:
+            serialized_msg = msg.copy()
+            if 'timestamp' in serialized_msg and hasattr(serialized_msg['timestamp'], 'isoformat'):
+                serialized_msg['timestamp'] = serialized_msg['timestamp'].isoformat()
+            serialized_history.append(serialized_msg)
+        
+        return {
+            "user_id": user_id,
+            "message_count": len(serialized_history),
+            "messages": serialized_history
+        }
+    except Exception as e:
+        logger.error(f"Error retrieving session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/session/{user_id}")
+async def clear_session(user_id: str):
+    """
+    Clear chat session for a user
+    
+    Args:
+        user_id: User identifier
+        
+    Returns:
+        Confirmation of deletion
+    """
+    try:
+        from utils.memory import get_conversation_memory
+        from utils.db import get_db
+        
+        memory = get_conversation_memory()
+        db = get_db()
+        
+        # Clear from memory
+        memory.clear_history(user_id)
+        
+        # Clear from database
+        db.delete_chat_session(user_id)
+        
+        logger.info(f"Cleared session for user {user_id}")
+        
+        return {
+            "success": True,
+            "message": f"Session cleared for user {user_id}"
+        }
+    except Exception as e:
+        logger.error(f"Error clearing session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

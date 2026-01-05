@@ -326,6 +326,102 @@ class Database:
         
         return result.acknowledged if hasattr(result, 'acknowledged') else True
     
+    
+    # Chat Session Collection Methods (for 25-message memory persistence)
+    def save_chat_session(
+        self, 
+        user_id: str, 
+        messages: List[Dict], 
+        session_state: Dict, 
+        expires_at: Any
+    ) -> bool:
+        """
+        Save or update chat session for memory persistence
+        
+        Args:
+            user_id: User identifier
+            messages: List of conversation messages
+            session_state: Compressed session state
+            expires_at: Session expiration datetime
+            
+        Returns:
+            True if successful
+        """
+        from datetime import datetime
+        collection = self.get_collection("chat_sessions")
+        
+        result = collection.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "messages": messages,
+                    "session_state": session_state,
+                    "updated_at": datetime.utcnow(),
+                    "expires_at": expires_at
+                },
+                "$setOnInsert": {
+                    "created_at": datetime.utcnow()
+                }
+            },
+            upsert=True
+        )
+        
+        return result.acknowledged
+    
+    def get_chat_session(self, user_id: str) -> Optional[Dict]:
+        """
+        Retrieve chat session from database
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            Session dict or None if not found
+        """
+        from datetime import datetime
+        collection = self.get_collection("chat_sessions")
+        
+        # Only return non-expired sessions
+        session = collection.find_one({
+            "user_id": user_id,
+            "expires_at": {"$gte": datetime.utcnow()}
+        })
+        
+        return session
+    
+    def delete_chat_session(self, user_id: str) -> bool:
+        """
+        Delete chat session
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            True if session was deleted
+        """
+        collection = self.get_collection("chat_sessions")
+        result = collection.delete_one({"user_id": user_id})
+        return result.deleted_count > 0
+    
+    def cleanup_expired_sessions(self) -> int:
+        """
+        Remove expired chat sessions from database
+        
+        Returns:
+            Number of sessions deleted
+        """
+        from datetime import datetime
+        collection = self.get_collection("chat_sessions")
+        
+        result = collection.delete_many({
+            "expires_at": {"$lt": datetime.utcnow()}
+        })
+        
+        if result.deleted_count > 0:
+            logger.info(f"🧹 Cleaned up {result.deleted_count} expired sessions")
+        
+        return result.deleted_count
+    
     def create_preference_indexes(self):
         """Create indexes for user_preferences collection"""
         try:
@@ -341,6 +437,23 @@ class Database:
             return True
         except Exception as e:
             logger.error(f"❌ Error creating indexes: {e}")
+            return False
+    
+    def create_session_indexes(self):
+        """Create indexes for chat_sessions collection"""
+        try:
+            collection = self.get_collection("chat_sessions")
+            
+            # Create unique index on user_id
+            collection.create_index("user_id", unique=True)
+            
+            # Create index on expires_at for efficient cleanup
+            collection.create_index("expires_at")
+            
+            logger.info("✅ Created indexes for chat_sessions collection")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Error creating session indexes: {e}")
             return False
 
 

@@ -148,34 +148,123 @@ class RAGSearchTool:
                 logger.warning("Empty search query provided")
                 return []
             
+            # Clean query
+            cleaned_query = query.strip()
+            
+            # Handle very short queries (< 3 chars)
+            if len(cleaned_query) < 3:
+                logger.warning(f"Query too short: '{cleaned_query}'")
+                return []
+            
             # Handle empty index
             if len(self.documents) == 0:
                 logger.warning("Knowledge base is empty")
                 return []
             
-            # Generate query embedding
-            query_embedding = np.array([embed_text(query)], dtype='float32')
+            # FAQ query expansion - add related keywords for better matching
+            expanded_query = cleaned_query
+            faq_mappings = {
+                "delivery": ["deliver", "delivery", "ship", "time", "hours"],
+                "refund": ["refund", "return", "money back", "cancel"],
+                "payment": ["payment", "pay", "cash", "card", "credit"],
+                "hours": ["hours", "time", "open", "close", "schedule"],
+                "allergen": ["allergen", "allergy", "gluten", "dairy", "nut"],
+                "track": ["track", "status", "where", "order"],
+            }
             
-            # Search in FAISS
-            top_k = min(top_k, len(self.documents))  # Don't request more than we have
-            distances, indices = self.index.search(query_embedding, top_k)
+            # Expand query if it matches common FAQs
+            query_lower = cleaned_query.lower()
+            for key, keywords in faq_mappings.items():
+                if key in query_lower:
+                    expanded_query = cleaned_query + " " + " ".join(keywords)
+                    logger.debug(f"📝 Expanded FAQ query: '{cleaned_query}' → '{expanded_query[:50]}...'")
+                    break
             
-            # Format results
-            formatted_results = []
-            for idx, distance in zip(indices[0], distances[0]):
-                if idx < len(self.documents):  # Valid index
-                    formatted_results.append({
-                        "text": self.documents[idx],
-                        "metadata": self.metadatas[idx] if idx < len(self.metadatas) else {},
-                        "score": float(distance),  # L2 distance (lower is better)
-                        "id": self.ids[idx] if idx < len(self.ids) else None
+            # Try vector search first (use expanded query for embedding)
+            try:
+                # Generate query embedding
+                query_embedding = np.array([embed_text(cleaned_query)], dtype='float32')
+                
+                # Search in FAISS
+                top_k = min(top_k, len(self.documents))  # Don't request more than we have
+                distances, indices = self.index.search(query_embedding, top_k)
+                
+                # Format results
+                formatted_results = []
+                for idx, distance in zip(indices[0], distances[0]):
+                    if idx < len(self.documents):  # Valid index
+                        formatted_results.append({
+                            "text": self.documents[idx],
+                            "metadata": self.metadatas[idx] if idx < len(self.metadatas) else {},
+                            "score": float(distance),  # L2 distance (lower is better)
+                            "id": self.ids[idx] if idx < len(self.ids) else None
+                        })
+                
+                if formatted_results:
+                    logger.info(f"✅ FAISS: Found {len(formatted_results)} results for '{cleaned_query[:50]}...'")
+                    return formatted_results
+                else:
+                    logger.warning(f"⚠️ FAISS returned 0 results for '{cleaned_query[:50]}...'")
+                    
+            except Exception as embed_error:
+                logger.error(f"❌ FAISS search failed: {embed_error}")
+            
+            # Fallback to text search if FAISS fails or returns nothing
+            logger.info(f"🔄 Attempting fallback text search for '{cleaned_query[:50]}...'")
+            
+            # Enhanced text matching fallback with word-level matching
+            fallback_results = []
+            query_lower = cleaned_query.lower()
+            query_words = set(query_lower.split())
+            
+            for i, doc in enumerate(self.documents):
+                doc_lower = doc.lower()
+                
+                # Exact phrase match (highest priority)
+                if query_lower in doc_lower:
+                    position = doc_lower.find(query_lower)
+                    relevance = 1.0 / (position + 1)
+                    
+                    fallback_results.append({
+                        "text": doc,
+                        "metadata": self.metadatas[i] if i < len(self.metadatas) else {},
+                        "score": relevance * 2.0,  # Boost exact matches
+                        "id": self.ids[i] if i < len(self.ids) else None,
+                        "source": "text_fallback_exact"
                     })
+                # Word-level match (secondary priority)
+                else:
+                    doc_words = set(doc_lower.split())
+                    matching_words = query_words.intersection(doc_words)
+                    
+                    if matching_words:
+                        # Calculate relevance based on word overlap
+                        word_overlap_ratio = len(matching_words) / len(query_words)
+                        
+                        if word_overlap_ratio > 0.3:  # At least 30% word overlap
+                            fallback_results.append({
+                                "text": doc,
+                                "metadata": self.metadatas[i] if i < len(self.metadatas) else {},
+                                "score": word_overlap_ratio,
+                                "id": self.ids[i] if i < len(self.ids) else None,
+                                "source": "text_fallback_word"
+                            })
             
-            logger.info(f"Found {len(formatted_results)} results for query: '{query[:50]}...'")
-            return formatted_results
+            # Sort by relevance and return top k
+            fallback_results.sort(key=lambda x: x["score"], reverse=True)
+            fallback_results = fallback_results[:top_k]
+            
+            if fallback_results:
+                logger.info(f"✅ Fallback: Found {len(fallback_results)} results for '{cleaned_query[:50]}...'")
+            else:
+                logger.warning(f"⚠️ No results found (both FAISS and fallback) for '{cleaned_query[:50]}...'")
+            
+            return fallback_results
             
         except Exception as e:
-            logger.error(f"Error searching knowledge base: {e}")
+            logger.error(f"❌ Error searching knowledge base: {e}")
+            import traceback
+            traceback.print_exc()
             return []
     
     def get_collection_stats(self) -> Dict[str, Any]:

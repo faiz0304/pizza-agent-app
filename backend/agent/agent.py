@@ -243,8 +243,8 @@ Respond with VALID JSON ONLY:"""
         if not history or len(history) == 0:
             return ""
         
-        # Include last 3 messages for context
-        recent_history = history[-3:] if len(history) > 3 else history
+        # Include last 15 messages for richer context (expanded from 3)
+        recent_history = history[-15:] if len(history) > 15 else history
         context_parts = []
         
         for msg in recent_history:
@@ -252,7 +252,12 @@ Respond with VALID JSON ONLY:"""
             content = msg.get("content", "")
             context_parts.append(f"{role}: {content}")
         
-        return "\n".join(context_parts)
+        context_str = "\n".join(context_parts)
+        
+        # Log context size for monitoring
+        logger.debug(f"📊 Context: {len(recent_history)} messages, ~{len(context_str)} chars")
+        
+        return context_str
     
     def _build_memory_context(
         self,

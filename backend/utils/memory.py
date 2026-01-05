@@ -16,16 +16,18 @@ class ConversationMemory:
     Provides short-term memory for better contextual responses
     """
     
-    def __init__(self, max_history: int = 10, expiry_minutes: int = 30):
+    def __init__(self, max_history: int = 25, expiry_minutes: int = 30, db = None):
         """
         Initialize conversation memory
         
         Args:
-            max_history: Maximum number of messages to keep per user
-            expiry_minutes: Minutes after which conversation expires
+            max_history: Maximum number of messages to keep per user (default: 25)
+            expiry_minutes: Minutes after which conversation expires (default: 30)
+            db: Optional database instance for session persistence
         """
         self.max_history = max_history
         self.expiry_minutes = expiry_minutes
+        self.db = db
         self.conversations: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
         self.last_activity: Dict[str, datetime] = {}
         self.pending_orders: Dict[str, Dict[str, Any]] = {}  # Track pending orders awaiting confirmation
@@ -64,6 +66,9 @@ class ConversationMemory:
         # Update last activity
         self.last_activity[user_id] = datetime.utcnow()
         
+        # Persist to MongoDB if database is available
+        self._save_to_db(user_id)
+        
         logger.debug(f"Added message for user {user_id}: {role} - {content[:50]}...")
     
     def set_pending_order(self, user_id: str, order_details: Dict[str, Any]):
@@ -81,6 +86,65 @@ class ConversationMemory:
             del self.pending_orders[user_id]
             logger.info(f"Cleared pending order for user {user_id}")
     
+    def _save_to_db(self, user_id: str):
+        """Save session to MongoDB for persistence"""
+        if not self.db:
+            return
+        
+        try:
+            messages = self.conversations.get(user_id, [])
+            if not messages:
+                return
+            
+            # Convert datetime objects to ISO strings for MongoDB
+            serialized_messages = []
+            for msg in messages:
+                serialized_msg = msg.copy()
+                if 'timestamp' in serialized_msg and isinstance(serialized_msg['timestamp'], datetime):
+                    serialized_msg['timestamp'] = serialized_msg['timestamp'].isoformat()
+                serialized_messages.append(serialized_msg)
+            
+            session_state = self.session_states.get(user_id, {})
+            expires_at = datetime.utcnow() + timedelta(minutes=self.expiry_minutes)
+            
+            self.db.save_chat_session(
+                user_id=user_id,
+                messages=serialized_messages,
+                session_state=session_state,
+                expires_at=expires_at
+            )
+            logger.debug(f"💾 Saved session for {user_id} to MongoDB ({len(messages)} messages)")
+        except Exception as e:
+            logger.error(f"❌ Failed to save session to MongoDB: {e}")
+    
+    def _load_from_db(self, user_id: str) -> bool:
+        """Load session from MongoDB if available"""
+        if not self.db:
+            return False
+        
+        try:
+            session = self.db.get_chat_session(user_id)
+            if not session:
+                return False
+            
+            # Restore messages
+            messages = session.get('messages', [])
+            
+            # Convert ISO strings back to datetime objects
+            for msg in messages:
+                if 'timestamp' in msg and isinstance(msg['timestamp'], str):
+                    msg['timestamp'] = datetime.fromisoformat(msg['timestamp'].replace('Z', '+00:00'))
+            
+            self.conversations[user_id] = messages
+            self.session_states[user_id] = session.get('session_state', {})
+            self.last_activity[user_id] = datetime.utcnow()
+            
+            logger.info(f"📥 Loaded session for {user_id} from MongoDB ({len(messages)} messages)")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Failed to load session from MongoDB: {e}")
+            return False
+    
     def get_history(self, user_id: str, last_n: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         Get conversation history for a user
@@ -94,6 +158,10 @@ class ConversationMemory:
         """
         # Clean expired first
         self._clean_expired()
+        
+        # Try to load from DB if not in memory
+        if user_id not in self.conversations or len(self.conversations[user_id]) == 0:
+            self._load_from_db(user_id)
         
         history = self.conversations.get(user_id, [])
         
@@ -137,7 +205,7 @@ class ConversationMemory:
 
     
     def _clean_expired(self):
-        """Remove expired conversations"""
+        """Remove expired conversations from memory and database"""
         now = datetime.utcnow()
         expired_users = []
         
@@ -148,6 +216,13 @@ class ConversationMemory:
         for user_id in expired_users:
             self.clear_history(user_id)
             logger.debug(f"Expired conversation for user {user_id}")
+        
+        # Clean expired sessions from MongoDB
+        if self.db:
+            try:
+                self.db.cleanup_expired_sessions()
+            except Exception as e:
+                logger.error(f"❌ Failed to cleanup expired sessions from MongoDB: {e}")
     
     def get_stats(self) -> Dict[str, Any]:
         """Get memory statistics"""
@@ -423,9 +498,14 @@ class ConversationMemory:
 
 
 # Global memory instance
-conversation_memory = ConversationMemory()
+conversation_memory = None  # Will be initialized with db later
 
 
 def get_conversation_memory() -> ConversationMemory:
     """Get the global conversation memory instance"""
+    global conversation_memory
+    if conversation_memory is None:
+        from utils.db import get_db
+        db = get_db()
+        conversation_memory = ConversationMemory(db=db)
     return conversation_memory
